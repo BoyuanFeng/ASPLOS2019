@@ -46,7 +46,7 @@
 \date{}
 \maketitle
 
-\thispagestyle{empty}
+%\thispagestyle{empty}
 
 \begin{abstract}
 As accelerating CNNs receives an increasing research focus, the save in resource always comes with a decrease in accuracy. To both increase accuracy and decrease resource consumption, we explore an environment information, called \textit{class skew}, which is easily available and exists widely in day-to-day life. Since the class skew may switch as time goes, we bring up \textit{probability layer} to utilize class skew without any overhead during the runtime. Further, we observe \textit{class skew dichotomy} that some class skew may appear frequently in the future, called \textit{hot class skew} and others will never appear again, called \textit{cold class skew}. Inspired by techniques from source code optimization, two modes, i.e., interpretation and compilation, are proposed. The interpretation mode pursues efficient adaption during runtime for cold class skew and the compilation mode aggressively optimize on hot ones for more efficient deployment in the future. Aggressive optimization is processed by class-specific pruning and provides extra benefit. Finally, we design a systematic framework, SECS, to dynamically detect class skew, processing interpretation and compilation, as well as select the most accurate architectures under the runtime resource budget. Evaluations on recognizing faces in TV shows and movies show that SECS can realize end-to-end classification speedups of xxx/xxx (on GPU/CPU) relative to a state-of-the-art convolutional neural network, at competitive accuracy.
