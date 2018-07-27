@@ -46,7 +46,7 @@
 \date{}
 \maketitle
 
-%\thispagestyle{empty}
+\thispagestyle{empty}
 
 \begin{abstract}
 As accelerating CNNs receives an increasing research focus, the save in resource always comes with a decrease in accuracy. To both increase accuracy and decrease resource consumption, we explore an environment information, called \textit{class skew}, which is easily available and exists widely in day-to-day life. Since the class skew may switch as time goes, we bring up \textit{probability layer} to utilize class skew without any overhead during the runtime. Further, we observe \textit{class skew dichotomy} that some class skew may appear frequently in the future, called \textit{hot class skew} and others will never appear again, called \textit{cold class skew}. Inspired by techniques from source code optimization, two modes, i.e., interpretation and compilation, are proposed. The interpretation mode pursues efficient adaption during runtime for cold class skew and the compilation mode aggressively optimize on hot ones for more efficient deployment in the future. Aggressive optimization is processed by class-specific pruning and provides extra benefit. Finally, we design a systematic framework, SECS, to dynamically detect class skew, processing interpretation and compilation, as well as select the most accurate architectures under the runtime resource budget. Evaluations on recognizing faces in TV shows and movies show that SECS can realize end-to-end classification speedups of xxx/xxx (on GPU/CPU) relative to a state-of-the-art convolutional neural network, at competitive accuracy.
@@ -55,69 +55,117 @@ As accelerating CNNs receives an increasing research focus, the save in resource
 
 
 
-\section{Introduction}
-Modern convolutional neural networks (CNNs) has made unprecedented advance in visual recognition tasks. In 2012, AlexNet \cite{krizhevsky2012imagenet} achieved a top-5 error of 17\% on ImageNet \cite{deng2009imagenet}, while previous method could only achieve a top-5 error of 25.7\%. Since then, CNNs have become the dominant method and main research direction in image recognition. In 2015, ResNet \cite{he2016deep} achieved a top-5 error of 3.57\%, supressing the human-level classification error rate on ImageNet reported as 5.1\% \cite{russakovsky2015imagenet}. The success of CNNs on visual recognition tasks has fueled the desire to deploy these networks on various kind of mobile platforms and has an increasingly important role in daily life, e.g., in robotics, self-driving cars, and on cell phones. These applications are usually computation-intensive and latency-sensitive, while running on resource-constrained devices. 
+\section{Introduction} \label{Introduction}
+% Need six paragraphs
 
-To enable the deployment of CNNs on mobile platforms, an increasing research focus has been received by accelerating CNNs, basically trading accuracy for less resource consumption. One approach is to prune the model utilizing the spatial redundancy inside the architecture. LCNN \cite{bagherinezhad2017lcnn} utilizes network quantization to achieve a $5$x speedup at a loss of $7.1$\% accuracy for the ResNet-18 model \cite{he2016deep}. On VGG-16 \cite{simonyan2014very}, filter pruning \cite{lin2018accelerating} is used to reduce computation by $4$x while the accuracy is also decreased by $2.81$\%. Another approach is to build a model store and dynamically select the most accurate model under available resource budget during runtime. 
-While these pruning methods and scheduling models can reduce the resource consumption, a decrease in accuracy is also introduced, which is not desired.
+Modern convolutional neural networks (CNNs) has made unprecedented advance in visual recognition tasks. In 2012, AlexNet \cite{krizhevsky2012imagenet} achieved a top-5 error of 17\% on ImageNet \cite{deng2009imagenet}, while previous method could only achieve a top-5 error of 25.7\%. Since then, CNNs have become the dominant method and main research direction in image recognition. In 2015, ResNet \cite{he2016deep} achieved a top-5 error of 3.57\%, supressing the human-level classification error rate on ImageNet reported as 5.1\% \cite{russakovsky2015imagenet}. The success of CNNs on visual recognition tasks has fueled the desire to deploy these networks on various kind of mobile platforms and has an increasingly important role in daily life, e.g., in robotics, self-driving cars, and on cell phones. These mobile platforms usually are memory-constrained and energy-limited while the CNNs are resource-intensive.
 
-
-
+To enable the deployment of CNNs on mobile platforms, an increasing research focus has been received by accelerating CNNs, basically trading accuracy for less resource consumption. One approach is to prune the model by reducing the spatial redundancy inside the architecture. LCNN \cite{bagherinezhad2017lcnn} utilizes network quantization to achieve a $5$x speedup at a loss of $7.1$\% accuracy for the ResNet-18 model \cite{he2016deep}. On VGG-16 \cite{simonyan2014very}, filter pruning \cite{lin2018accelerating} is used to reduce computation by $4$x while the accuracy is also decreased by $2.81$\%. Another approach is to build a model store and dynamically select the most accurate model under available resource budget during runtime. JouleGuard \cite{hoffmann2015jouleguard} utilize control theory to build a scheduling model and save $3$x with a decrease in accuracy of $4$\%. While the resource consumption is reduced, these pruning methods and scheduling models also introduce a decrease in accuracy, which is not desired.
 
 
 
+\begin{figure*}
+\centering
+\begin{subfigure}{.2\textwidth}
+  \centering
+  \includegraphics[scale=0.1]{classTypeExample1.jpg}
+  \caption{House}
+\end{subfigure}%
+\begin{subfigure}{.2\textwidth}
+  \centering
+  \includegraphics[scale=0.14]{classTypeExample2.jpg}
+  \caption{Cat}
+\end{subfigure}%
+\begin{subfigure}{.2\textwidth}
+  \centering
+  \includegraphics[scale=0.1]{classTypeExample3.jpg}
+  \caption{Dog}
+\end{subfigure}%
+\begin{subfigure}{.2\textwidth}
+  \centering
+  \includegraphics[scale=0.1]{classTypeExample4.jpg}
+  \caption{Tree}
+\end{subfigure}
 
-While the deployment on these platforms shows an inspiring perspective, the nature of limited resource on these platforms still obstacles the accessibility of CNNs. For example, large data transfer is required while over-the-air updates has been reported to incrementally improve the safety of Tesla's Autopilot semi-autonomous driving functionality \cite{teslas2018}. With AlexNet\cite{krizhevsky2012imagenet} and VggNet \cite{simonyan2014very}, more than 60MB and 138MB parameters need to be transferred from the server to the car respectively. To make the model updating more feasible, smaller models with less parameters are preferred. Another challenge for the deployment is the intensive computation of CNNs. Tens of GFLOPs computation is needed by modern CNNs for processing a single image \cite{canziani2016analysis}. While multiple GPUs can be grouped together to train and process images in lab, the intensive computation consumed by modern CNNs are not affordable for most mobile platforms. Thus, to better fulfill the requirement of limited resource, CNNs need to be resource-aware and the architectures need to be adjusted according to the available resource budget, i.e., energy and memory.
 
-We observe that the input data to mobile platforms in the real world usually has strong temporal correlation. While thousands of objects may appear in our daily life, only a small portion of objects can be seen in most specific scenarios, called \textit{runtime class skew}. For example, we may meet thousands of people through the whole year, but only less than ten people could appear in our lab. Actually, experiments on videos of day-to-day life \cite{shen2016fast} shows that $10$ objects comprised $90$\% of all objects in $85$\% time. To meet the requirement of classifying these $10$ objects, a small model with $10$ classes with less than $10$ classes would be sufficient and the huge model classifying thousands of objects could be escaped. 
+\begin{subfigure}{.2\textwidth}
+  \centering
+  \includegraphics[scale=0.1]{classTypeExample5.jpg}
+  \caption{Egyptian Cat}
+\end{subfigure}
+\begin{subfigure}{.2\textwidth}
+  \centering
+  \includegraphics[scale=0.11]{classTypeExample6.jpg}
+  \caption{Kitty Cat}
+\end{subfigure}
+\begin{subfigure}{.2\textwidth}
+  \centering
+  \includegraphics[scale=0.15]{classTypeExample7.jpg}
+  \caption{Tiger Cat}
+\end{subfigure}
+\begin{subfigure}{.2\textwidth}
+  \centering
+  \includegraphics[scale=0.1]{classTypeExample8.jpg}
+  \caption{Angora Cat}eq:1
+\end{subfigure}
 
-While recent works involve utilizing runtime class skew, we provide an efficient way to adapt the model according to runtime information. Specifically, all of existing works \cite{han2016mcdnn, shen2016fast} require runtime finetuning, which uses transfer learning \cite{doersch2015unsupervised, noroozi2016unsupervised, oquab2014learning, yosinski2014transferable} to adapt the last few layers towards the runtime class skew. MCDNN \cite{han2016mcdnn} flows all training inputs through lower layers at compile time to avoid parts of computation during runtime. Even if pre-computation is deployed, a 14-second latency still exist, which obstacle the feasibility of utilizing runtime class skew. In contrast, we take an unusual approach, called \textit{probability layer}, to utilize runtime class skew without any finetuning and achieve an euqal or better performance.
+\caption{Set of images showing the class effect. Upper images is easier to distinguish than the lower ones.}
+\label{fig:classEffect}
+\end{figure*}
 
-Once utilizing runtime class skew has increased accuracy dramatically, new chance appears for using more aggressive pruning methods. In fact, the main drawback of current pruning methods is the reduction in accuracy. The standard approaches involve matrix factorization \cite{jaderberg2014speeding, kim2015compression, xue2014singular}, matrix pruning \cite{chen2015compressing, han2015learning}, quantization \cite{bagherinezhad2017lcnn, han2015deep} and group convolution \cite{howard2017mobilenets, ZhaZho17ShuffleNet}. All of these methods prune an architecture with given hyper-parameters, i.e. number of layers, channel connections, and number of neurons. When hyper-parameters become the pruning target, hand-crafted architectures are still used and trail-and-errors is the only approach to compare different architectures. Selecting hyper-parameters is challenging since we cannot know the accuracy of the new architecture before it is actually trained and tested. Considering that modern CNNs usually takes days or even weeks to train, only a limited number of hyper-parameters could be used, which limits the exploration space dramtically.
 
-Instead, we observe that CNNs often have strong redundancy inside its structure, i.e., within feature maps, across channels, and across layers. Inspired by the loop perforation technique from source code optimization \cite{figurnov2016perforatedcnns}, we can speed up computation by skipping their evaluation in some of the positions. We further observe that different positions has different redundancy and we can select the hyper-parameter according to their influence over final accuracy. Based on these insight, we propose a framework, called \textit{perforation}, for selecting hyper-parameters in three levels; i.e., neuron-wise, channel-wise, and layer-wise, without any finetune for the new architecture and agnostic to the model architecture. While carefully hand-crafted architecture, SqueezeNet, achieves AlexNet-level accuracy with $50$x less parameters, perforation can reach $600$x reduction in parameters while also achieve AlexNet-level accuracy. Perforation is orthogonal to matrix factorization, matrix pruning, quantization, and group convolution, and can be combined with all for further optimization. When combined with runtime class skew, perforation can prune the model according to which classes appear in current environment and only maintain the important path for appearing classes.
 
-In this paper, we present \textbf{SECS}, a real-time image classification framework to achieve the above goal.SECS essentially detects and utilize runtime class skew and prune the candidate model according to the environment and the resource budget, as detailed in Section 3. Inspired by the interpretation and compilation in modern programming language, we also propose the two mode for $SECS$. When we first confront a class skew, we utilize probability layer to adapt to runtime class skew without any overhead and only utilize existing models, i.e. \textit{interpretation mode}. Once a class skew has appeared for a number of times more than the pre-defined threshold, the class skew will be marked as "hot" and pruning towards this specific class skew will be deployed, i.e. \textit{compilation mode}, after the resource constrain on the platform is resolved, i.e. connected to electric and network. In addition, we carefully design a scheduling algorithm based on control theory to select the Pareto-optimal models under the available resource budget. Extensive evaluation shows that our system can potentially reduce the computation by xx times and memory consumption by xx times.
+To both reduce resource consumption and increase accuracy, we identify an environment information that has not been studied thoroughly, called \textit{runtime class skew}. Runtime class skew refers to the phenomenon that in an environment, i.e. a specific location or time period, only a few classes may appear while others seldomly appear or do not show up at all. For example, only a few people may appear in our lab, even if we may meet thousands of people through the whole year. While a complex model with thousands of classes is required to classify thousands of peoples, a small model with less than $10$ classes can be sufficient in the lab. Less number of classes indicates a higher accuracy and less resource consumption. For example, if we randomly guess from $1000$ classes, the accuracy is $0.1\%$, while the accuracy would increase to $10\%$ for randomly guessing from $10$ classes. Considering the main constraint of pruning methods is the decrease in accuracy, this increase in accuracy provides more space on optimizing the architecture. Thus more resource consumption can be reduced.
+
+The challenge is how to utilize class skew efficiently, especially considering that class skew may switch frequently as time goes, i.e., every 10 minutes. It is infeasible to pre-train a sequence of models for each class skew, since there is a mind-bogglingly huge number of class skews. For example, if we take $10$ out of $100$ classes, there would be $1.73 \ast 10^{14}$ combinations of class skew. Existing works \cite{han2016mcdnn, shen2016fast} choose to finetune the model towards the class skew during runtime when class skew switches, based on the technique from transfer learning  \cite{doersch2015unsupervised, noroozi2016unsupervised, oquab2014learning, yosinski2014transferable}. With transfer learning, the number of nodes in the last layer will be reduced according to class skew and last few layers will be finetuned by several epochs, which introduce lots of computation overhead and latency. A 14-second or even minutes latency \cite{shen2016fast} will occur every time the class skew switches and the model is adapted. To efficiently adapt the model during runtime towards the class skew, we bring up \textit{probability layer}, an easily-implemented and highly flexible add-on module to existing methods, which introduces no overhead and produces an equivalent or better accuracy than finetuning.
+
+Further examination on class skew reveals the existence of \textit{class skew dichotomy}. Class skew dichotomy represents the phenomenon that some class skew appears frequently in the future, called \textit{hot class skew}, while other class skews never appear again or appear seldom, called \textit{cold class skew}. For example, the hot class skew composed by less-than-ten people from our lab appears everyday when we go to the lab while the cold class skew composed by different types of cats and dogs in a pet house appears generally at most once a month. Inspired by techniques from source code optimization, two modes, called \textit{interpretation} and \textit{compilation}, are designed for cold and hot class skews, respectively. For cold class skew, we utilize the probability layer to efficiently adapt the model during runtime with little or no model optimization, called interpretation mode. Once a class skew appears more frequently than a threshold, we will mark it as hot class skew and optimize the model aggressively by class-specific pruning, called compilation mode. 
+
+
+To aggressively optimize the model for hot class skews, class-specific pruning is conducted. The intuition of class-specific pruning comes from figure \ref{fig:classEffect}. Some classes are easier to distinguish while others are hard. For example, classifying four types of cats is much harder than labelling four more-distinguished classes, i.e., house, cat, dog, and tree. Thus, while a complex model is needed to classify four types of cats, a simple model would be enough to label house, cat, dog, and tree. To utilize this intrinsic property of classification target, class-specific pruning is desired, which produces smaller models for simpler class groups by automatically select the least number of hyperparameters, i.e., number of layers, channels, and neurons. 
+
+Class-specific pruning is challenging because retraining the whole model is required to get the accuracy of a new set of hyperparameters, which consumes lots of energy and resource. To speed up class-specific pruning, we target the relative performance of models instead of the exact accuracy of each architecture, since the only result we cares is the relative performance during the slection of hyper-parameter. We observe that the reason to train a new model for every set of hyperparameters is that the feature map size is destoried after deleting some layers, channels, or neurons. Inspired by techiniques from source code optimization, we bring up \textit{perforation} for recovering the feature maps size to enable the forward computation and generate a sequence of models with increasing accuracy without any finetuning. With this monotonic sequence of models, we can only choose the best model and train this single model for deployment, instead of training all models during the class-specific pruning.
+
+
+
+
+
+%Instead, we observe that CNNs often have strong redundancy inside its structure, i.e., within feature maps, across channels, and across layers. Inspired by the loop perforation technique from source code optimization \cite{figurnov2016perforatedcnns}, we can speed up computation by skipping their evaluation in some of the positions. We further observe that different positions has different redundancy and we can select the hyper-parameter according to their influence over final accuracy. Based on these insight, we propose a framework, called \textit{perforation}, for selecting hyper-parameters in three levels; i.e., neuron-wise, channel-wise, and layer-wise, without any finetune for the new architecture and agnostic to the model architecture. While carefully hand-crafted architecture, SqueezeNet, achieves AlexNet-level accuracy with $50$x less parameters, perforation can reach $600$x reduction in parameters while also achieve AlexNet-level accuracy. Perforation is orthogonal to matrix factorization, matrix pruning, quantization, and group convolution, and can be combined with all for further optimization. When combined with runtime class skew, perforation can prune the model according to which classes appear in current environment and only maintain the important path for appearing classes.
+
+In this paper, we present \textbf{SECS}, an efficient deep stream processing service. SECS efficiently detects and utilizes runtime class skew and prunes the candidate model according to the environment and the resource budget, as detailed in section \ref{SECS}. We carefully design a profiler to detect the runtime class skew. Once the class skew is detected, the profiler will further decide whether the class skew is a hot class skew or a cold one. For cold class skews, probability layer is utilized to efficiently adapt the model towards the class skew during runtime with no overhead. If the class skew is marked a hot one, the profiler will aggressively optimize the model with class-specific pruning after the resource constraint is resolved. The adapted models will be stored in model bank and during runtime a scheduling model based on control theory will dynamically select the Pareto-optimal models under the available resource budget. Extensive evaluation shows that our system can potentially reduce the computation by xx times and memory consumption by xx times.
 
 In summary, we make the following contributions:
 
 \begin{enumerate}
-  \item We bring up \textit{probability layer}, a technique adapting all models to the runtime class skew without any overhead and achieving equal or better accuracy than finetuning.
-  \item We propose a pruning approach, \textit{perforation}, for selecting hyper-parameters in three levels; i.e., neuron-wise, channel-wise, and layer-wise, without any finetune for the new architecture and agnostic to the model architecture. Our pruning approach can prune a model to AlexNet-level accuracy with 300x less parameters automatically, compared with the hand-crafted optimization method, \textit{SqueezeNet}, achieving same accuracy with 60x less parameters.
-  \item We build a system, \textit{SECS}, as a background service. Extensive evaluation confirms its benefit is significant. (Experiments results to be added). 
+  \item We identify an widely-existing environment information, runtime class skew, which can both decrease resource consumption and increase accuracy.
+  \item We bring up \textit{probability layer} to efficiently adapting all models to the runtime class skew without any overhead and achieving an equal or better accuracy than finetuneing.
+  \item We identify class skew dichotomy and bring up two modes, interpreation and compilation, to adapt the model with no overhead for cold class skews and prune aggressively for hot class skews to gain long-term benefit.
+  \item We identify that some class groups are easier to classify while distinguishing some other class groups are harder and bring up \textit{class-specific pruning} to automatically select hyper-parameters according to the targetting classes without any finetuning during the selection process.
+  \item We build a system, \textit{SECS} for efficient deep stream processing service. Extensive evaluation confirms its benefit is significant.
 \end{enumerate}
 
 
 
 
-
-
-
-\section{Motivation}
+\section{Motivation} \label{Motivation}
 \subsection{Motivating applications}
 Among the fastest growing applications, vision-based cognitive assistance applications and robotics visions are two representative categories.
 
-As an example cognitive assistance applications, Aira \cite{aria2018} continuously recognizes surrounding environment and help the blind person with ordinary tasks, i.e. reading a handwritten note, navigating the grocery store, and even to run the Boston Marathon. With the record on runtime class skew that appears frequently, including repeated environment and activity, CNN architectures can be optimized towards a more personal assistance. The automatic pruning methods utilize personal behavior pattern locally and protect user privacy perfectly.
+As an example of cognitive assistance applications, smart glasses, Aira \cite{aria2018}, continuously recognizes surrounding environment and help the blind person with ordinary tasks, i.e. reading a handwritten note, navigating the grocery store, and even to run the Boston Marathon. To make it feasible, these smart glasses are expected to be lightweight and run at least several hours before recharging. 
 
-On the other hand, robotic visions such as remote-controlled robotic animals \cite{bbc2018} for search specific animals and documenting secret lives of animals in the wild, teleoperated robots \cite{landmine2018} for detecting and removing landmine in various environment, and rover robot \cite{rover2018} for space exploration. 
+On the other hand, robotic visions are expected to recognize objects automatically and work in the wild for days. For example, remote-controlled robotic animals are used by BBC \cite{bbc2018} to search specific animals and document secret lives of animals in the wild. Teleoperated robots \cite{landmine2018} are used for detecting and removing landmine in various environment. SpotMini \cite{spot-mini} are expected to handle objects, climbs stairs, and will operate in offices, home, and outdoors.
 
-\paragraph{Common themes.} Most of these operate in the wild environment maintaining a strong temporal locality. According to a experiments on videos of day-to-day life from Youtube \cite{shen2016fast}, $10$ objects comprised $90$\% of all objects in $85$\% time. The class skew may appear for a small time period, which requires efficient model adaption, the \textit{interpretation mode}. Further, some class skews may appear repeatedly, i.e. in our office and lab, which provides chance for pruning model towards the specific class skew, the \textit{compilation mode}.
-
-
+\paragraph{Common themes.} While mobile platforms are resource-limited, these platforms are still expected to deploy CNNs which consumes both energy and memory intensively, since CNNs has a much better performance of CNNs than traditional approaches. While existing approaches of solving this tension generally trade accuracy for saving resource, runtime class skew is an environment information that can both increase accuracy and decrease resource consumption. Further, runtime class skew widely existes in the wild and is freely available. 
 
 
 \subsection{Opportunities}
-The above applications all take input from the life-style environment. Such input exhibits runtime class skew, due to activities of the mobile devices showing strong spatial and temporal locality. 
+The above applications all take input from the life-style environment. Such input exhibits runtime class skew, since the activities of mobile devices show strong spatial and temporal locality. 
 
-\paragraph{Temporal correlation.} We can view the input stream as a continual camera feed. In the input stream, every frame differs only slightly from previous frames. Thus, the objects in frames usually keep appearing for a time period before the user moves to another scene. For example, a small group of people will appear frequently in a scenario of films, generally lasting for tens of minutes, and another group of people will not appear until the scenario has changed. The runtime class skew appears frequently and provide chance to simplify CNN models. 
+\paragraph{Temporal locality.} We can view the input stream as a continual camera feed. In the input stream, every frame differs only slightly from previous frames. Thus, the objects in frames usually keep appearing for a time period before the user moves to another scene. For example, a small group of people will appear frequently in a scenario of films, generally lasting for tens of minutes, and another group of people will not appear until the scenario has changed. The runtime class skew appears frequently and provides chance to simplify CNN models. 
 
-\paragraph{Spatial correlation} It is common for humans to follow along recurrent trajectories, for example, due to their regular social activities or frequenting a favorite park from time to time. Therefore, there is some level of recurrence of the scenes obtained as part of those activities. Through these repeating scenarios, same runtime class skew will also keep appearing, which make it a feasible choice to optimize CNNs towards the specific environment.
+\paragraph{Spatial locality} It is common for humans to follow along recurrent trajectories, for example, due to their regular social activities or frequenting a favorite park from time to time. Therefore, there is some level of recurrence of the scenes obtained as part of those activities. Through these repeating scenarios, same runtime class skew will also keep appearing, which make it a feasible choice to optimize CNNs towards the runtime class skew.
 
-
-Utilizing runtime class skew can both increase accuracy and decrease resource consumption. The intuition comes from utilizing runtime class skew in random guessing. If we randomly guess from $1000$ classes, the accuracy is $0.1\%$, while the accuracy would increase to $10\%$ for randomly guessing from $10$ classes. Even if we have changed nothing in the model architecture, the accuracy would increase naturally by decreasing the number of classes. Our experiments have shown that the top-1 accuracy of a 40-layer DenseNet \cite{huang2017densely} on CIFAR100 \cite{krizhevsky2009learning} would increase to 99\% when we constrain the output space to be $5$ classes, while the top-1 accuracy of the 40-layer DenseNet on $100$ classes is only $73.75$\%. Compared to recent works on increasing accuracy through more complex and deep models and dramtically increased resource consumption, utilizing runtime class skew is almost free since we only need to profile the incoming classes and detect the scenario.
-
-Further, utilizing runtime class skew increases accuracy and provides new chance for using more agressive pruning methods. In fact, the main drawback of current pruning methods \cite{bagherinezhad2017lcnn, figurnov2016perforatedcnns, han2015deep, veniat2017learning, wen2016learning} is the reduction in accuracy. For example, while LCNN \cite{bagherinezhad2017lcnn} can reduce the computation by $37.6$x, the top-1 accuracy will also decrease from $56.6$\% to $44.3$. In contrast, once the runtime class skew is detected, models can be adapted efficiently with probability layer and accuracy can be increased dramatically. Since probability layer is agnostic to model architecture, the Pareto-optimal model under available resource budget can be selected and combined with probability layer directly without any overhead.
-
+The existence of strong temporal and spatial locality indicates the existence of class skew. Experiments on videos of day-to-day life from Youtube \cite{shen2016fast} shows that $10$ objects comprised $90$\% of all objects in $85$\% time. Utilizing class skew will both increase accuracy and decrease resource consumption, as detailed in section \ref{evaluation}. 
 
 \subsection{Common processing steps}
 
@@ -170,7 +218,7 @@ We address these challenges by probability layer, an efficient model adaption al
 
 
 
-\section{SECS System Design}
+\section{SECS System Design} \label{SECS}
 \subsection{Overview}
 SECS utilize runtime class skew efficiently and optimize architectures automatically to provide real-time image classification. When an input comes, it will be processed by a general model and the results will be recorded by the profiler to update the distribution. Once the profiler decides that a runtime class skew has appeared, an adapted model will be generated efficiently by probability layer and future inputs will be handled by the adapted model instead of the general model. This is called the \textit{interpretation mode} since for class skew that does not appear frequently we only use efficient model adaption without any architecture optimization towards the specific class skew. For each runtime class skew, the profiler will record how frequently it appears. Once a runtime class skew is decided to be a frequent pattern, an automatical pruning method, perforation, will prune the model towards the specific class skew during cold time and the specialized architecture will be called during the future appearance of this specific class skew. This procedure is called the \textit{compilation mode} since it will provide much more specific optimiazation towards the class skew appearing frequently. We discuss the individual steps next.
 
@@ -200,7 +248,7 @@ In this section, we introduce the probability layer and the PCNN. Before proceed
 
 \paragraph{Key Assumption. } 
 % Key assumption
-The main difference between the proposed layer and the original CNNs is that we take into consideration the environment information. In original CNNs, the prediction for each image will be made individually, assuming a sequence of images is independent and identically distributed (\textit{i.i.d}). However, in real life, this assumption does not hold and strong spatial and temporal locality may exist. In particular, we assume that in the environment the number of classes, class type, and class distribution is fixed while a huge difference between training dataset and testing dataset exists. This is a reasonable assumption on the environment in real life. Experiments on videos of day-to-day life from Youtube \cite{shen2016fast} shows that $10$ objects comprised $90$\% of all objects in $85$\% time. 
+The main difference between the proposed layer and the original CNNs is that we take into consideration the environment information. In original CNNs, the prediction for each image will be made individually, assuming a sequence of images is independent and identically distributed (\textit{i.i.d}). However, in real life, this assumption does not hold and strong spatial and temporal locality may exist. In particular, we assume that in the environment the number of classes, class type, and class distribution is fixed while a huge difference between training dataset and testing dataset exists. This is a reasonable assumption on the environment in real life. 
 
 %The prediction will be made by CNNs individually, assuming a sequence of images is independent and identically distributed (i.i.d). In real life, this assumption does not hold and strong spatial and temporal
 
@@ -328,54 +376,6 @@ where $m_l = 1$ if the $l$-th filter is salient, and $0$ otherwise. $\odot$ deno
 
 
 
-\begin{figure*}
-\centering
-\begin{subfigure}{.2\textwidth}
-  \centering
-  \includegraphics[scale=0.1]{classTypeExample1.jpg}
-  \caption{House}
-\end{subfigure}%
-\begin{subfigure}{.2\textwidth}
-  \centering
-  \includegraphics[scale=0.14]{classTypeExample2.jpg}
-  \caption{Cat}
-\end{subfigure}%
-\begin{subfigure}{.2\textwidth}
-  \centering
-  \includegraphics[scale=0.1]{classTypeExample3.jpg}
-  \caption{Dog}
-\end{subfigure}%
-\begin{subfigure}{.2\textwidth}
-  \centering
-  \includegraphics[scale=0.1]{classTypeExample4.jpg}
-  \caption{Tree}
-\end{subfigure}
-
-
-\begin{subfigure}{.2\textwidth}
-  \centering
-  \includegraphics[scale=0.1]{classTypeExample5.jpg}
-  \caption{Egyptian Cat}
-\end{subfigure}
-\begin{subfigure}{.2\textwidth}
-  \centering
-  \includegraphics[scale=0.11]{classTypeExample6.jpg}
-  \caption{Kitty Cat}
-\end{subfigure}
-\begin{subfigure}{.2\textwidth}
-  \centering
-  \includegraphics[scale=0.15]{classTypeExample7.jpg}
-  \caption{Tiger Cat}
-\end{subfigure}
-\begin{subfigure}{.2\textwidth}
-  \centering
-  \includegraphics[scale=0.1]{classTypeExample8.jpg}
-  \caption{Angora Cat}eq:1
-\end{subfigure}
-
-\caption{Set of images showing the class effect. Upper images is easier to distinguish than the lower ones.}
-\label{fig:classEffect}
-\end{figure*}
 
 \paragraph{Class-specific pruning.} 
 We observe that some groups of classes are much harder to classify than others, as indicated in figure \ref{fig:classEffect}. For example, it is much easier to classify house, cat, dog, and tree than distinguishing four different cat species. In fact, distinguishing four different cat species requires expertise in cat species and carefully check on subtle features, i.e. ear size, tail length, coat patterns, and sometimes even personality \cite{cat2018}. Through a series of experiments, we found that classes with low similarity have much higher testing accuracy than classes with high similarity even if the model architecture and the number of classes remain unchanged. Specifically, using a CNN model with 4 convolutional layers and 3 fully connected layers, the accuracy is only 31.49\% to classify baby, boy, girl, man, woman from CIFAR100 while the accuracy would increase to 66.5\% when classifying bottles, bowls, cans, cups and plates. Following along this line of thought, with the same targetting accuracy, models could consume less resource to classify a group of class with high difference. 
@@ -456,7 +456,7 @@ The scheduler will wrap up all the algorithms in scheduling model and give the m
 
 
 
-\section{Implementation}
+\section{Implementation} \label{implementation}
 \subsection{Architecture}
 
 \begin{figure} 
@@ -523,7 +523,7 @@ To simplify the usage of SECS service, the user only need to use the interface \
 
 
 
-\section{Evaluation}
+\section{Evaluation} \label{evaluation}
 
 
 
@@ -707,7 +707,7 @@ The fundamental of using runtime distribution is detecting runtime distribution,
 
 
 
-\section{Related Work}
+\section{Related Work} \label{relatedWork}
 \paragraph{Environment Information}
 
 % Talk about the scenario
@@ -735,15 +735,17 @@ Model compression is to compress CNN architecture through matrix factorization a
 \paragraph{Early stop}
 Early stop \cite{teerapittayanon2016branchynet, panda2016conditional} is an architecture with branches and will stop calculating once a branch is enough confident that an image has been classified correctly. Early stop contains various architectures to achieve energy efficiency through reducing unnecessary computation. This is orthogonal to runtime specialization and could be included into the model bank.
 
-\section{Conclusion and Future Work}
+\section{Conclusion and Future Work} \label{conclusion}
 We have presented probability layer which exploits runtime environment information to increase prediction accuracy. Probability layer requires only a single extra layer after the general CNN models with unnoticeable extra computation and obtains a boost in accuracy. Compared to transfer learning, probability layer achieves comparable or even better accuracy boost, avoids retraining, and maintain the ability to detect new classes. Additionally, probability layer can be combined with acceleration methods which exploit various types of network redundancy to achieve further speedups.
 
 
 
 
-\bibliography{references}
+
 \bibliographystyle{plain}
+\bibliography{references}
 
 
 \end{document}
+
 
