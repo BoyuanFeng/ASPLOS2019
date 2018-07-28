@@ -1,7 +1,7 @@
 \documentclass[pageno]{jpaper}
 
 %replace XXX with the submission number you are given from the ASPLOS submission site.
-\newcommand{\asplossubmissionnumber}{XXX}
+\newcommand{\asplossubmissionnumber}{289}
 
 \usepackage[normalem]{ulem}
 \usepackage{graphicx}
@@ -63,58 +63,6 @@ Modern convolutional neural networks (CNNs) has made unprecedented advance in vi
 To enable the deployment of CNNs on mobile platforms, an increasing research focus has been received by accelerating CNNs, basically trading accuracy for less resource consumption. One approach is to prune the model by reducing the spatial redundancy inside the architecture. LCNN \cite{bagherinezhad2017lcnn} utilizes network quantization to achieve a $5$x speedup at a loss of $7.1$\% accuracy for the ResNet-18 model \cite{he2016deep}. On VGG-16 \cite{simonyan2014very}, filter pruning \cite{lin2018accelerating} is used to reduce computation by $4$x while the accuracy is also decreased by $2.81$\%. Another approach is to build a model store and dynamically select the most accurate model under available resource budget during runtime. JouleGuard \cite{hoffmann2015jouleguard} utilize control theory to build a scheduling model and save $3$x with a decrease in accuracy of $4$\%. While the resource consumption is reduced, these pruning methods and scheduling models also introduce a decrease in accuracy, which is not desired.
 
 
-
-\begin{figure*}
-\centering
-\begin{subfigure}{.2\textwidth}
-  \centering
-  \includegraphics[scale=0.1]{classTypeExample1.jpg}
-  \caption{House}
-\end{subfigure}%
-\begin{subfigure}{.2\textwidth}
-  \centering
-  \includegraphics[scale=0.14]{classTypeExample2.jpg}
-  \caption{Cat}
-\end{subfigure}%
-\begin{subfigure}{.2\textwidth}
-  \centering
-  \includegraphics[scale=0.1]{classTypeExample3.jpg}
-  \caption{Dog}
-\end{subfigure}%
-\begin{subfigure}{.2\textwidth}
-  \centering
-  \includegraphics[scale=0.1]{classTypeExample4.jpg}
-  \caption{Tree}
-\end{subfigure}
-
-
-\begin{subfigure}{.2\textwidth}
-  \centering
-  \includegraphics[scale=0.1]{classTypeExample5.jpg}
-  \caption{Egyptian Cat}
-\end{subfigure}
-\begin{subfigure}{.2\textwidth}
-  \centering
-  \includegraphics[scale=0.11]{classTypeExample6.jpg}
-  \caption{Kitty Cat}
-\end{subfigure}
-\begin{subfigure}{.2\textwidth}
-  \centering
-  \includegraphics[scale=0.15]{classTypeExample7.jpg}
-  \caption{Tiger Cat}
-\end{subfigure}
-\begin{subfigure}{.2\textwidth}
-  \centering
-  \includegraphics[scale=0.1]{classTypeExample8.jpg}
-  \caption{Angora Cat}eq:1
-\end{subfigure}
-
-\caption{Set of images showing the class effect. Upper images is easier to distinguish than the lower ones.}
-\label{fig:classEffect}
-\end{figure*}
-
-
-
 To both reduce resource consumption and increase accuracy, we identify an environment information that has not been studied thoroughly, called \textit{runtime class skew}. Runtime class skew refers to the phenomenon that in an environment, i.e. a specific location or time period, only a few classes may appear while others seldomly appear or do not show up at all. For example, only a few people may appear in our lab, even if we may meet thousands of people through the whole year. While a complex model with thousands of classes is required to classify thousands of peoples, a small model with less than $10$ classes can be sufficient in the lab. Less number of classes indicates a higher accuracy and less resource consumption. For example, if we randomly guess from $1000$ classes, the accuracy is $0.1\%$, while the accuracy would increase to $10\%$ for randomly guessing from $10$ classes. Considering the main constraint of pruning methods is the decrease in accuracy, this increase in accuracy provides more space on optimizing the architecture. Thus more resource consumption can be reduced.
 
 The challenge is how to utilize class skew efficiently, especially considering that class skew may switch frequently as time goes, i.e., every 10 minutes. It is infeasible to pre-train a sequence of models for each class skew, since there is a mind-bogglingly huge number of class skews. For example, if we take $10$ out of $100$ classes, there would be $1.73 \ast 10^{14}$ combinations of class skew. Existing works \cite{han2016mcdnn, shen2016fast} choose to finetune the model towards the class skew during runtime when class skew switches, based on the technique from transfer learning  \cite{doersch2015unsupervised, noroozi2016unsupervised, oquab2014learning, yosinski2014transferable}. With transfer learning, the number of nodes in the last layer will be reduced according to class skew and last few layers will be finetuned by several epochs, which introduce lots of computation overhead and latency. A 14-second or even minutes latency \cite{shen2016fast} will occur every time the class skew switches and the model is adapted. To efficiently adapt the model during runtime towards the class skew, we bring up \textit{probability layer}, an easily-implemented and highly flexible add-on module to existing methods, which introduces no overhead and produces an equivalent or better accuracy than finetuning.
@@ -126,7 +74,12 @@ To aggressively optimize the model for hot class skews, class-specific pruning i
 
 Class-specific pruning is challenging because retraining the whole model is required to get the accuracy of a new set of hyperparameters, which consumes lots of energy and resource. To speed up class-specific pruning, we target the relative performance of models instead of the exact accuracy of each architecture, since the only result we cares is the relative performance during the slection of hyper-parameter. We observe that the reason to train a new model for every set of hyperparameters is that the feature map size is destoried after deleting some layers, channels, or neurons. Inspired by techiniques from source code optimization, we bring up \textit{perforation} for recovering the feature maps size to enable the forward computation and generate a sequence of models with increasing accuracy without any finetuning. With this monotonic sequence of models, we can only choose the best model and train this single model for deployment, instead of training all models during the class-specific pruning.
 
-
+\begin{figure}
+    \centering
+    \includegraphics [scale=0.12] {twoGroups.png}
+    \caption{Distinguishing dog, house, tree, cat in the left group is much easier than classifying the four cat types in the right, i.e., kitty cat, tiger cat, Angora cat, and Egyptian cat. }
+    \label{fig:classEffect}
+\end{figure}
 
 
 
@@ -167,33 +120,18 @@ The above applications all take input from the life-style environment. Such inpu
 
 The existence of strong temporal and spatial locality indicates the existence of class skew. Experiments on videos of day-to-day life from Youtube \cite{shen2016fast} shows that $10$ objects comprised $90$\% of all objects in $85$\% time. Utilizing class skew will both increase accuracy and decrease resource consumption, as detailed in section \ref{evaluation}. 
 
-\subsection{Common processing steps}
-
-
-\begin{figure}
-  \includegraphics[scale=0.14]{profiler.png}
-  \caption{Schematic processing flow.}
-  \label{fig:profiler}
-\end{figure}
-
-Figure \ref{fig:profiler} shows the schematic processing flow of an input image, as depicted in . When new input comes, the profiler will check whether there is class skew in current environment. If not, the input will be forwarded to a general model handling all possible classes. After the general model classify the input image, results will be both sent to the user and processed profiler to update class distribution. Once the profiler decides that a class skew has appeared, an adapted model will be generated efficiently according to available resource budget and desired accuracy. Then, the input will be forwarded to the adapted model, which consumes less resource, instead of the general model. Once the adapted model has finished the process of image and has strong confident in the results, the result will also be send to the user and used to update the class distribution in profiler. If the adapted model is not confident, the input will be forwarded to the general model and a more accurate procedure will be employed. Entropy and the value of predicted class could be used as a measure of model confidence. After a time period, when the profiler detects a new class skew, i.e. the user arrive at a new place, the model will be adapted towards the new environment and replace the old one. The detection of class skew could be done by profiler according to existing works. 
-
-Existing works must forward the input to the general model for further speculation when the adapted model is not confident, because new classes may have appeared and the adapted model could only detect a small group of classes. Probability layer solved this problem by forcing the model to considering the runtime class skew while still maintain the ability to choose from classes that have never appeared when there is a strong reason to do so. Thus the forwarding of images to general model could be escaped in our design, which reduces lots of overhead.
-
-
-
-
-
+We further observe the existance of class skew dichotomy, which means that some class skews appears in the future, called hot class skew, while other class skews never appear again or appear seldom, called cold class skew. Inspired by techniques from source code, this dichotomy motivates us to implement two different levels of optimization with different overhead on hot and class skew, called the compilation and interpretation. Specifically, class-specific pruning can be conducted on hot class skews to achieve extra benefit.
 
 
 \subsection{Challenges}
-The challenge remains in two respective; i.e. how to utilize runtime class skew efficiently and how to prune the model towards desired resource budget automatically. 
+The challenge remains in two respective; i.e. how to utilize runtime class skew efficiently and how to conduct class-specific pruning with low overhead. 
 
-In order to effectively utilize runtime class skew, we need efficient method to adapt the pretrained architecture towards environment, with little or no resource consumption and temporal latency. Intuitively, model adaption, especially when the number of target classes has decreased dramatically, requires changing the architecture, e.g., the reduction on number of nodes in the softmax layer. Recent works finetune the last few layers for adapting the model to runtime class skew. However, finetuning during runtime is unfeasible since it brings tremendous overhead in both computation and memory. It is also infeasible to adapt the pre-trained model to all possible class skews beforehand. Considering the number of combinations, if we take $10$ classes out of $100$ classes, the total count of combinations would achieve a mind-bogglingly huge number of $1.73*10^{14}$. Further, it is also hard to decide number of layers to be finetuned. Recent work \cite{yosinski2014transferable} reports that co-adaption between adjacent layers and spliting networks between co-adapted layers may hurt the performance dramatically. 
+Utilizing runtime class skew is challenging because the runtime class skew switches frequently as time goes, i.e., every $10$ minutes. It is infeasible to pre-train a model for every class skew during the deployment time, due to the mind-bogglingly huge number of class combinations. In existing works \cite{\cite{han2016mcdnn, shen2016fast}}, a general model handling all possible classes will be trained at the deployment and once the class skew is detected during runtime, the model will be adapted correspondingly. Specifically, the number of nodes in the softmax layer will be reduced and the last few layers will be finetuned during runtime towards the class skew under the direction of transfer learning \cite{doersch2015unsupervised, noroozi2016unsupervised, oquab2014learning, yosinski2014transferable}, which consumes energy and memory intensively. 
 
-Automatic pruning models and selecting hyper-parameters is also challenging. The changed architectures require a long-time training to get the performance, which limits the search space of hyper-parameters dramatically. To generate a cascade of models with different resource consumption and performance, existing papers utilize hand-selected architectures, which is not a automatical procedure and only a small number of hyperparameters can be tested. Specifically, NoScope \cite{kang2017noscope} only performs model search by varying the number of convolutional layers (2 or 4), number of convolution units in the base layer (32 or 64), and number of neurons in the fully connected layer (32, 64, 128, or 256). MCDNN \cite{han2016mcdnn} chooses between reduce number of nodes in fully connected layers, decrease number of kernels, and eliminate convolutional layers entirely. FastVideo \cite{shen2016fast} also manually removes layers, decreases kernel sizes, increases kernel strides, and reduces the size of fully-connected layers, to generate a cascade of models with the tradeoff between accuracy and resource consumption. All these manually selected architectures requires human interfere. Automatic pruning is challenge since once we change the model architecture we cannot precess an image and get the accuracy until the model is trained again. We cannot even get a cascade of models with decreasing accuracy before we train and test the architectures one by one. To make system framework for mobile platforms and model pruning towards runtime class skew more feasible, it is necessary to find an approach pruning models automatically and generate a cascade of models with decreasing accuracy without training.
+The challeng of class-specific pruning resides in the obstacle of comparing the performance of various hyper-parameters. Class-specific pruning requires to select the simplest model with least layers, channels, and neurons for a given group of classes. During this process, the relative importance of different layers, channels, and neurons on accuracy needs to be compared and the parameters with least influence should be removed. However, to get the exact performance, training the new model cannot be avoided while it is unaffordable to do so for each new architecture. Existing papers hand-select architectures, which is not automatical and only test a small space of hyperparameters, i.e. $2$ or $4$ convolutional layers, $32$ or $64$ neurons in each layer, as detailed in section \ref{relatedWork}.
 
-We address these challenges by probability layer, an efficient model adaption algorithm, and perforation, an automatic pruning methods. Further, we designed a real-time image classification framework, SECS, to automatically detect and utilize runtime class skew and select the Pareto-optimal models under available resource budget.
+
+We address these challenges by probability layer, an efficient model adaption algorithm, and perforation, an automatic class-specific pruning methods with no finetuning during the process of selection hyper-parameters. Further, we designed a real-time image classification framework, SECS, to automatically detect and utilize runtime class skew, as well as select the Pareto-optimal models under available resource budget.
 
 
 
@@ -220,7 +158,20 @@ We address these challenges by probability layer, an efficient model adaption al
 
 \section{SECS System Design} \label{SECS}
 \subsection{Overview}
-SECS utilize runtime class skew efficiently and optimize architectures automatically to provide real-time image classification. When an input comes, it will be processed by a general model and the results will be recorded by the profiler to update the distribution. Once the profiler decides that a runtime class skew has appeared, an adapted model will be generated efficiently by probability layer and future inputs will be handled by the adapted model instead of the general model. This is called the \textit{interpretation mode} since for class skew that does not appear frequently we only use efficient model adaption without any architecture optimization towards the specific class skew. For each runtime class skew, the profiler will record how frequently it appears. Once a runtime class skew is decided to be a frequent pattern, an automatical pruning method, perforation, will prune the model towards the specific class skew during cold time and the specialized architecture will be called during the future appearance of this specific class skew. This procedure is called the \textit{compilation mode} since it will provide much more specific optimiazation towards the class skew appearing frequently. We discuss the individual steps next.
+
+\begin{figure} 
+\includegraphics[scale=0.095]{architecture.png}
+\caption{System architecture.}
+\label{fig:Architecture}
+\end{figure}
+
+SECS is a real-time deep stream processing system, as detailed in figure \ref{fig:Architecture}, consisting of five modules.
+SECS utilize runtime class skew efficiently and conducts optimize architectures automatically to provide real-time image classification. When an input comes, it will be processed by a general model and the results will be recorded by the profiler to update the distribution. Once the profiler decides that a runtime class skew has appeared, an adapted model will be generated efficiently by probability layer and future inputs will be handled by the adapted model instead of the general model. This is called the \textit{interpretation mode} since for class skew that does not appear frequently we only use efficient model adaption without any architecture optimization towards the specific class skew. For each runtime class skew, the profiler will record how frequently it appears. Once a runtime class skew is decided to be a frequent pattern, an automatical pruning method, perforation, will prune the model towards the specific class skew during cold time and the specialized architecture will be called during the future appearance of this specific class skew. This procedure is called the \textit{compilation mode} since it will provide much more specific optimiazation towards the class skew appearing frequently. We discuss the individual steps next.
+
+
+
+
+The image classification service consists of the following modules. The \texttt{AppListener} maintains a threadpool, summarizes the requests from upper-level applications into a stream, and forwards the stream into \texttt{profiler} for further procedure. During runtime, the \texttt{profiler} maintains current class distribution and effectively detect class skew. Once class skew is detected, the \texttt{profiler} will either call existing adapted model from \texttt{model bank}, or require the \texttt{probability layer} to efficiently adapt the model. The classification results will be feed back to \texttt{profiler} which will both respond the \texttt{AppListener} and update runtime class skew. During cold time, the \texttt{profiler} will check whether a class skew has appeared more frequently than a pre-defined threshold, and call \texttt{perforation} to generate class-specific pruned models for more optimized classification in the future.
 
 
 \subsection{Notation}
@@ -457,17 +408,7 @@ The scheduler will wrap up all the algorithms in scheduling model and give the m
 
 
 \section{Implementation} \label{implementation}
-\subsection{Architecture}
-
-\begin{figure} 
-\includegraphics[scale=0.095]{architecture.png}
-\caption{System architecture.}
-\label{fig:Architecture}
-\end{figure}
-
-We implement SECS as a end-to-end classification service with Tensorflow \cite{tensorflow2015-whitepaper}. Figure \ref{fig:Architecture} shows the architecture of the system. 
-
-The image classification service consists of the following modules. The \texttt{AppListener} maintains a threadpool, summarizes the requests from upper-level applications into a stream, and forwards the stream into \texttt{profiler} for further procedure. During runtime, the \texttt{profiler} maintains current class distribution and effectively detect class skew. Once class skew is detected, the \texttt{profiler} will either call existing adapted model from \texttt{model bank}, or require the \texttt{probability layer} to efficiently adapt the model. The classification results will be feed back to \texttt{profiler} which will both respond the \texttt{AppListener} and update runtime class skew. During cold time, the \texttt{profiler} will check whether a class skew has appeared more frequently than a pre-defined threshold, and call \texttt{perforation} to generate class-specific pruned models for more optimized classification in the future.
+We implement SECS as a end-to-end classification service with Tensorflow \cite{tensorflow2015-whitepaper}. 
 
 
 \subsection{Image classification service}
@@ -734,6 +675,11 @@ Model compression is to compress CNN architecture through matrix factorization a
 
 \paragraph{Early stop}
 Early stop \cite{teerapittayanon2016branchynet, panda2016conditional} is an architecture with branches and will stop calculating once a branch is enough confident that an image has been classified correctly. Early stop contains various architectures to achieve energy efficiency through reducing unnecessary computation. This is orthogonal to runtime specialization and could be included into the model bank.
+
+
+To generate a cascade of models with different resource consumption and performance, existing papers utilize hand-selected architectures, which is not a automatical procedure and only a small number of hyperparameters can be tested. Specifically, NoScope \cite{kang2017noscope} only performs model search by varying the number of convolutional layers (2 or 4), number of convolution units in the base layer (32 or 64), and number of neurons in the fully connected layer (32, 64, 128, or 256). MCDNN \cite{han2016mcdnn} chooses between reduce number of nodes in fully connected layers, decrease number of kernels, and eliminate convolutional layers entirely. FastVideo \cite{shen2016fast} also manually removes layers, decreases kernel sizes, increases kernel strides, and reduces the size of fully-connected layers, to generate a cascade of models with the tradeoff between accuracy and resource consumption. All these manually selected architectures requires human interfere. Automatic pruning is challenge since once we change the model architecture we cannot precess an image and get the accuracy until the model is trained again. We cannot even get a cascade of models with decreasing accuracy before we train and test the architectures one by one. To make system framework for mobile platforms and model pruning towards runtime class skew more feasible, it is necessary to find an approach pruning models automatically and generate a cascade of models with decreasing accuracy without training.
+
+
 
 \section{Conclusion and Future Work} \label{conclusion}
 We have presented probability layer which exploits runtime environment information to increase prediction accuracy. Probability layer requires only a single extra layer after the general CNN models with unnoticeable extra computation and obtains a boost in accuracy. Compared to transfer learning, probability layer achieves comparable or even better accuracy boost, avoids retraining, and maintain the ability to detect new classes. Additionally, probability layer can be combined with acceleration methods which exploit various types of network redundancy to achieve further speedups.
