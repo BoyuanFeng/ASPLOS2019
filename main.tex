@@ -37,7 +37,8 @@
 \epstopdfDeclareGraphicsRule{.ps}{pdf}{.pdf}{ps2pdf -dEPSCrop -dNOSAFER #1 \OutputFile}
 
 
-
+\usepackage{stackengine}
+\def\delequal{\mathrel{\ensurestackMath{\stackon[1pt]{=}{\scriptstyle\Delta}}}}
 
 \begin{document}
 
@@ -70,7 +71,7 @@ The challenge is how to utilize class skew efficiently, especially considering t
 Further examination on class skew reveals the existence of \textit{class skew dichotomy}. Class skew dichotomy represents the phenomenon that some class skew appears frequently in the future, called \textit{hot class skew}, while other class skews never appear again or appear seldom, called \textit{cold class skew}. For example, the hot class skew composed by less-than-ten people from our lab appears everyday when we go to the lab while the cold class skew composed by different types of cats and dogs in a pet house appears generally at most once a month. Inspired by techniques from source code optimization, two modes, called \textit{interpretation} and \textit{compilation}, are designed for cold and hot class skews, respectively. For cold class skew, we utilize the probability layer to efficiently adapt the model during runtime with little or no model optimization, called interpretation mode. Once a class skew appears more frequently than a threshold, we will mark it as hot class skew and optimize the model aggressively by class-specific pruning, called compilation mode. 
 
 
-To aggressively optimize the model for hot class skews, class-specific pruning is conducted. The intuition of class-specific pruning comes from figure \ref{fig:classEffect}. Some classes are easier to distinguish while others are hard. For example, classifying four types of cats is much harder than labelling four more-distinguished classes, i.e., house, cat, dog, and tree. Thus, while a complex model is needed to classify four types of cats, a simple model would be enough to label house, cat, dog, and tree. To utilize this intrinsic property of classification target, class-specific pruning is desired, which produces smaller models for simpler class groups by automatically select the least number of hyperparameters, i.e., number of layers, channels, and neurons. 
+To aggressively optimize the model for hot class skews, class-specific pruning is conducted. The intuition of class-specific pruning comes from Figure \ref{fig:classEffect}. Some classes are easier to distinguish while others are hard. For example, classifying four types of cats is much harder than labelling four more-distinguished classes, i.e., house, cat, dog, and tree. Thus, while a complex model is needed to classify four types of cats, a simple model would be enough to label house, cat, dog, and tree. To utilize this intrinsic property of classification target, class-specific pruning is desired, which produces smaller models for simpler class groups by automatically select the least number of hyperparameters, i.e., number of layers, channels, and neurons. 
 
 Class-specific pruning is challenging because retraining the whole model is required to get the accuracy of a new set of hyperparameters, which consumes lots of energy and resource. To speed up class-specific pruning, we target the relative performance of models instead of the exact accuracy of each architecture, since the only result we cares is the relative performance during the slection of hyper-parameter. We observe that the reason to train a new model for every set of hyperparameters is that the feature map size is destoried after deleting some layers, channels, or neurons. Inspired by techiniques from source code optimization, we bring up \textit{perforation} for recovering the feature maps size to enable the forward computation and generate a sequence of models with increasing accuracy without any finetuning. With this monotonic sequence of models, we can only choose the best model and train this single model for deployment, instead of training all models during the class-specific pruning.
 
@@ -165,88 +166,69 @@ We address these challenges by probability layer, an efficient model adaption al
 \label{fig:Architecture}
 \end{figure}
 
-SECS is a real-time deep stream processing system, as detailed in figure \ref{fig:Architecture}, consisting of five modules.
-SECS utilize runtime class skew efficiently and conducts optimize architectures automatically to provide real-time image classification. When an input comes, it will be processed by a general model and the results will be recorded by the profiler to update the distribution. Once the profiler decides that a runtime class skew has appeared, an adapted model will be generated efficiently by probability layer and future inputs will be handled by the adapted model instead of the general model. This is called the \textit{interpretation mode} since for class skew that does not appear frequently we only use efficient model adaption without any architecture optimization towards the specific class skew. For each runtime class skew, the profiler will record how frequently it appears. Once a runtime class skew is decided to be a frequent pattern, an automatical pruning method, perforation, will prune the model towards the specific class skew during cold time and the specialized architecture will be called during the future appearance of this specific class skew. This procedure is called the \textit{compilation mode} since it will provide much more specific optimiazation towards the class skew appearing frequently. We discuss the individual steps next.
+SECS is a real-time deep stream processing system utilizing runtime class skew efficiently and conducting class specific pruning automatically, as detailed in Figure \ref{fig:Architecture}. The \texttt{AppListener} maintains a threadpool, summarizes the requests from upper-level applications into a stream, and forwards the stream into \texttt{profiler} for further procedure. During runtime, the \texttt{profiler} maintains current class distribution and effectively detect class skew. Once class skew is detected, the \texttt{profiler} will either call existing adapted model from \texttt{model bank}, or require the \texttt{probability layer} to efficiently adapt the model. The classification results will be feed back to \texttt{profiler} which will both respond the \texttt{AppListener} and update runtime class skew. During cold time, the \texttt{profiler} will check whether a class skew has appeared more frequently than a pre-defined threshold, and call \texttt{perforation} to generate class-specific pruned models for more optimized classification in the future. We discuss the individual steps next.
 
 
 
 
-The image classification service consists of the following modules. The \texttt{AppListener} maintains a threadpool, summarizes the requests from upper-level applications into a stream, and forwards the stream into \texttt{profiler} for further procedure. During runtime, the \texttt{profiler} maintains current class distribution and effectively detect class skew. Once class skew is detected, the \texttt{profiler} will either call existing adapted model from \texttt{model bank}, or require the \texttt{probability layer} to efficiently adapt the model. The classification results will be feed back to \texttt{profiler} which will both respond the \texttt{AppListener} and update runtime class skew. During cold time, the \texttt{profiler} will check whether a class skew has appeared more frequently than a pre-defined threshold, and call \texttt{perforation} to generate class-specific pruned models for more optimized classification in the future.
 
 
-\subsection{Notation}
-CNN can be viewed as a feed-forward multi-layer architecture that maps the input images $X$ to a vector of estimated probability for each class $\vec{p} = (p_1, p_2, ..., p_n)$
-, where $n$ is the number of classes, and select the class with highest estimated probability 
-${\text{argmax}} \; p_i$
-as the true class. Here we treat the whole CNN model as a classifier which gives the estimated probability $p_i$ for the label i given the input image X
-$p_i = P(i|X)$. 
-Let us denote a set of image feature maps in the l-th layer by $\mathcal{Z}_l \in \mathbb{R}^{H_l \: \times \: W_l \: \times \: C_l}$, where $H_L$, $W_l$, $C_l$ are the dimensions of the $l$-th ($1 \leqslant l \leqslant L$) feature maps along the axes of sptial height, spatial width, and channels , respectively. $L$ denotes the number of convolutional layers. Individual feature maps in the $l$-th layer could be denoted as $\mathcal{Z}_l^{(k)} \in \mathbb{R}^{H_l \: \times \: W_l}$ with $k \in [1, \:2, \: \dots \:, C_l]$. The individual output feature map of the $l$-th convolutional layer $\mathcal{Z^{(k)}}$ is obtained by applying the convolutional operator ($\ast$) to a set of input feature maps with the corresponding filter $\mathcal{W}_l^{(k)} \in \mathbb{R}^{d \: \times \: d \: \times \: C_{l-1}}$, i.e.,
+\paragraph{Notation}
+CNN can be viewed as a feed-forward multi-layer architecture that maps the input images $X$ to a vector of estimated probability for each class $\vec{p} = (p_1, p_2, ..., p_n)$, where $n$ is the number of classes and $p_i = P(i|X)$ is the estimated probability $p_i$ for the label $i$ given the input image $X$. In particular, the image feature maps in the $l$-th ($1 \leqslant l \leqslant L$) layer can be denoted by $\mathcal{Z}_l \in \mathbb{R}^{H_l \: \times \: W_l \: \times \: C_l}$, where $H_L$, $W_l$, $C_l$ are the dimensions of the $l$-th feature maps along the axes of sptial height, spatial width, and channels , respectively. $L$ denotes the number of convolutional layers. Individual feature maps in the $l$-th layer could be denoted as $\mathcal{Z}_l^{(k)} \in \mathbb{R}^{H_l \: \times \: W_l}$ with $k \in [1, \:2, \: \dots \:, C_l]$. The individual output feature map $\mathcal{Z}_l^{(k)}$ of the $l$-th convolutional layer is obtained by applying the convolutional operator ($\ast$) to a set of input feature maps with the corresponding filter $\mathcal{W}_l^{(k)} \in \mathbb{R}^{d \: \times \: d \: \times \: C_{l-1}}$, i.e.,
 \begin{equation}
-    \mathcal{Z}_l^{(k)} = f(\mathcal{Z}_{l_1} \ast \mathcal{W}^{(k)}),
+    \mathcal{Z}_l^{(k)} = f(\mathcal{Z}_{l-1}^{(k)} \ast \mathcal{W}_l^{(k)}),
 \end{equation}
 where $f(\cdot)$ is a non-linear activation function. Further, the $l$-th layer can be written as
 \begin{equation} \label{eq:1}
-    \mathcal{Z}_l = f(\mathcal{Z}_{l_1} \ast \mathcal{W}_l)
+    \mathcal{Z}_l = f(\mathcal{Z}_{l-1} \ast \mathcal{W}_l)
 \end{equation}
 where $\mathcal{W}_l \in \mathbb{R}^{C_l \: \times \:   d \: \times \: d \: \times \: C_{l-1}}$.
 
 
 
 \subsection{Probability Layer}
-In this section, we introduce the probability layer and the PCNN. Before proceeding further, we introduce the notation that will be used in the rest of the paper.
+In this section, we introduce the probability layer, which can adapt the general model towards the runtime class skew without any overhead.
+
+\paragraph{Key Assumption.} 
+The main difference between the proposed layer and the original CNNs is that we take into consideration the environment information. In original CNNs, the prediction for each image will be made individually, assuming a sequence of images is independent and identically distributed (\textit{i.i.d}). However, in real life, this assumption does not hold and strong temporal and spatial locality may exist. Instead, we assumes runtime class skew exists, which means the number of classes and class types are fixed during a time period. While we assume that a class skew may exist for a time period, it is still possible that the class skew switches to another class skew after a few minutes, which can be detected and handled by the profiler, as detailed in section \ref{profilerSection}. Further, we assume the existence of a model classifying all possible classes, called the \textit{general model}. This assumption is reasonable because modern CNNs can be trained to classify thousands of classes \cite{krizhevsky2012imagenet, simonyan2014very, szegedy2015going, he2016deep, huang2017densely} and human faces \cite{parkhi2015deep, schroff2015facenet, taigman2015web}.
+
+\paragraph{Intuition.}
+Probability layer helps by using environment information that original CNNs does not use. When human recognizes an object, both vision and environment information will be used, i.e., what we have seen recently and which objects may appear here. However, CNNs can only make use of visual information while discarding environment information, which makes it extremely difficult to distinguish classes with similar appearance. For example, Figure \ref{fig:sub2} and Figure \ref{fig:sub3} shows images for bottle and rocket respectively. It is hard to distinguish these two classes only from images while environment information can easily rule out rocket in most scenarios. 
+
+Figure \ref{fig:intuition} gives intuition on how probability layer utilize environment information. In Figure \ref{fig:intuition}, the lower row represents the outputs from softmax layer and the upper row represents the probability layer. The orange nodes stand for the classes with high predicted probability in softmax layer and the red nodes stand for the suggestion from the environment. The prediction from probability layer will be selected from the intersection of the set of red nodes and orange nodes, which rules out confusing classes for CNNs. The intersection will not be empty since the red nodes are the classes detected by the general model frequently during the recent time period.
+%how to select general model?
 
 
 
-\paragraph{Key Assumption. } 
-% Key assumption
-The main difference between the proposed layer and the original CNNs is that we take into consideration the environment information. In original CNNs, the prediction for each image will be made individually, assuming a sequence of images is independent and identically distributed (\textit{i.i.d}). However, in real life, this assumption does not hold and strong spatial and temporal locality may exist. In particular, we assume that in the environment the number of classes, class type, and class distribution is fixed while a huge difference between training dataset and testing dataset exists. This is a reasonable assumption on the environment in real life. 
-
-%The prediction will be made by CNNs individually, assuming a sequence of images is independent and identically distributed (i.i.d). In real life, this assumption does not hold and strong spatial and temporal
-
-In this section, we present the \textit{probability layer}. Probability layer is an extra layer after the CNN model, rescaling the output of softmax layer. Rescaling is a topic in statistics \cite{saerens2002adjusting}. To the best of our knowledge, we are the first to discuss rescaling in CNN context. The outputs of original CNNs predict the probability for each class and the probability layer will adjust this prediction based on the difference of class distribution in training and testing dataset. In particular, for classes with different distributions in training and testing dataset, the probability layer will rescale the corresponding outputs from softmax layer according to the difference in distribution. For other classes with same distribution in both training and testing dataset, the outputs of the proposed layer are equal to the outputs of the softmax layer. 
+\paragraph{Approach. } Probability layer is an extra layer after the CNN model, rescaling the output of softmax layer. Rescaling is a topic in statistics \cite{saerens2002adjusting}. To the best of our knowledge, we are the first to discuss rescaling in CNN context. The outputs of original CNNs predict the probability for each class and the probability layer will adjust this prediction based on the difference of class distribution in training and testing dataset. In particular, for classes with different distributions in training and testing dataset, the probability layer will rescale the corresponding outputs from softmax layer according to the difference in distribution. For other classes with same distribution in both training and testing dataset, the outputs of the proposed layer are equal to the outputs of the softmax layer. 
 
 
-The probability layer will take as inputs the originally predicted probability, class distribution in training dataset, as well as the distribution in testing dataset, and output a vector for the rescaled prediction. The first input is the prediction $\vec{P(\cdot|X)}$ from the softmax layer, which represents the originally predicted probability for each class from the original CNNs. The second input is a vector of class distribution $\vec{P(\cdot)}$ in training dataset and the third one is a vector of class distribution $\vec{P_t(\cdot)}$ in testing dataset. The probability layer will rescale the predicted probability in $\vec{P(\cdot|X)}$ element wisely and produce as output a vector $\vec{P_t(\cdot|X)}$ for the rescaled prediction of each class.
+The probability layer will take as input the originally predicted probability, class distribution in training dataset, as well as the distribution in testing dataset, and output a vector for the rescaled prediction. The first input is the prediction vector $\mathbf{P}(\cdot|X)$ from the softmax layer, which represents the originally predicted probability for each class from the original CNNs. The second input is a vector of class distribution $\mathbf{P}(\cdot)$ in training dataset and the third one is a vector of class distribution $\mathbf{P}_t(\cdot)$ in testing dataset. The probability layer will rescale the predicted probability in $\mathbf{P}(\cdot|X)$ element wisely and produce as output a vector $\mathbf{P}_t(\cdot|X)$ for the rescaled prediction of each class.
 
 Formally, let the outputs of CNNs with and without rescaling are
 \begin{equation}
-    P_t(i|X) = \frac{P_t(X|i) \cdot P_t(i)}{P_t(x)}
+    P_t(i|X) = \frac{P_t(X|i) \cdot P_t(i)}{P_t(X)}
 \end{equation}
 and
 \begin{equation}
-    P(i|X) = \frac{P(X|i) \cdot P(i)}{P(x)}
+    P(i|X) = \frac{P(X|i) \cdot P(i)}{P(X)}
 \end{equation}
-respectively. Here $P_t(i)$ means the class distribution in testing dataset and $P_t(i|X)$ represents the predicted probability for class $i$ after the probability layer. We assume that $P_t(X|i)$ equals $P(X|i)$ approximately, where $P(X|i)$ is the distribution of image data for class $i$. This assumption makes sense since, for a class $i$, the selection of input x is random. Transforming equation $4$ and $5$ into 
-\begin{equation}
-    P_t(X|i) = \frac{P_t(i|X) \cdot P_t(X)}{P_t(i)}
-\end{equation}
-and
-\begin{equation}
-    P(X|i) = \frac{P(i|X) \cdot P(X)}{P(i)}
-\end{equation}
-and following our assumption that $P_t(X|i) = P(X|i)$, we can derive that 
+respectively. Here $P_t(i)$ means the class distribution in testing dataset and $P_t(i|X)$ represents the predicted probability for class $i$ after the probability layer. We assume that $P_t(X|i)$ equals $P(X|i)$ approximately, where $P(X|i)$ is the distribution of image data for class $i$. This assumption makes sense since, for a class $i$, the selection of input x is random. Through transforming equation $4$ and equation $5$ as well as utilizing $P_t(X|i) = P(X|i)$, we can derive that 
 \begin{equation}
     P_t(i|X) = \frac{P_t(i)}{P(i)}\cdot P(i|X) \cdot P(X) 
-\end{equation}. Considering $\sum_{i=1}^n P_t(i|X) = 1$, we can get that $P(X) = 1/(\sum_{j=1}^{n} \frac{P_t(j)}{P(j)} \cdot P(j|X))$. Finally, the rescaling formular is 
+\end{equation}. Considering $\sum_{i=1}^n P_t(i|X) = 1$, we can get the rescaling formular as
 \begin{equation}
     P_t(i|X) = \frac{\frac{P_t(i)}{P(i)} \cdot P(i|X)}{\sum_{j=1}^n \frac{P_t(i)}{P(j)} \cdot P(j|X)}
 \end{equation}
 
 
 To give probability layer the ability to detect new classes, we choose not to rescale the outputs from softmax layer when the original model has strong confidence in its prediction and set the formula of probability layer as
-\begin{equation}
-    P_t(i|X) = \frac{\frac{P_t(i)}{P(i)} \cdot P(i|X)}{\sum_{j=1}^n \frac{P_t(i)}{P(j)} \cdot P(j|X)} \cdot I_{\{P(i|X) < \omega\}} + P(i|X) \cdot I_{\{P(i|X) >= \omega\}}
+\begin{equation} \label{eq: recover}
+    P_t(i|X) = \frac{\frac{P_t(i)}{P(i)} \cdot P(i|X)}{\sum_{j=1}^n \frac{P_t(i)}{P(j)} \cdot P(j|X)} \cdot I_{\{P(i|X) < \omega\}} + P(i|X) \cdot I_{\{P(i|X) >= \omega\}} 
 \end{equation}
-, where $\omega$ is the threshold when we should trust the original prediction and $I_X$ is the indicator function such that
-\begin{equation}
-I_X(x) = \begin{cases}
-1, &\text{if $x \in X$}\\
-0, &\text{$o.w.$}
-\end{cases}
-\end{equation}
-. If a model have a strong confidence in its prediction, the accuracy would be much higher than the model's average accuracy. Our experiments show that CNNs will give most of the images high predicted probability and the accuracy of these images will exceed average accuracy a lot. Probability layer helps when the original model is confused on the prediction and will not interfere the decision when the original model has confidence in its prediction.
-
-
+, where $\omega$ is the threshold above which we should trust the original prediction and $I_X$ is the indicator function such that
+$I_X(x) \delequal \; $if $x\in X$, return $1$, otherwise return $0$.
+If a model have a strong confidence in its prediction, the accuracy would be much higher than the model's average accuracy. Our experiments show that CNNs will give most of the images high predicted probability and the accuracy of these images will exceed average accuracy a lot. Probability layer helps when the original model is confused on the prediction and will not interfere the decision when the original model has confidence in its prediction.
 
 
 
@@ -276,14 +258,6 @@ I_X(x) = \begin{cases}
 \end{figure}
 
 
-
-
-
-% Intuition of probability layer
-Probability layer helps by using environment information that original CNNs does not use. When human recognizes an object, both vision and environment information will be used, i.e., what we have seen recently and which objects may appear here. However, CNNs can only make use of visual information while discarding environment information, which makes it extremely difficult to distinguish classes with similar shapes. For example, Figure \ref{fig:sub2} and Figure \ref{fig:sub3} shows images from CIFAR100 for bottle and rocket respectively. It is hard to distinguish these two classes only from images while environment information can easily rule out rocket in most scenarios. 
-
-Figure \ref{fig:intuition} gives intuition on how probability layer utilize environment information. In figure \ref{fig:intuition}, the lower row represents the outputs from softmax layer and the upper row represents the probability layer. The orange nodes stand for the classes with high predicted probability in softmax layer and the red nodes stand for the suggestion from the environment. The prediction from probability layer will be selected from the intersection of the set of red nodes and orange nodes, which rules out confusing classes for CNNs. 
-%how to select general model?
 
 
 \subsection{Perforation}
@@ -329,7 +303,7 @@ where $m_l = 1$ if the $l$-th filter is salient, and $0$ otherwise. $\odot$ deno
 
 
 \paragraph{Class-specific pruning.} 
-We observe that some groups of classes are much harder to classify than others, as indicated in figure \ref{fig:classEffect}. For example, it is much easier to classify house, cat, dog, and tree than distinguishing four different cat species. In fact, distinguishing four different cat species requires expertise in cat species and carefully check on subtle features, i.e. ear size, tail length, coat patterns, and sometimes even personality \cite{cat2018}. Through a series of experiments, we found that classes with low similarity have much higher testing accuracy than classes with high similarity even if the model architecture and the number of classes remain unchanged. Specifically, using a CNN model with 4 convolutional layers and 3 fully connected layers, the accuracy is only 31.49\% to classify baby, boy, girl, man, woman from CIFAR100 while the accuracy would increase to 66.5\% when classifying bottles, bowls, cans, cups and plates. Following along this line of thought, with the same targetting accuracy, models could consume less resource to classify a group of class with high difference. 
+We observe that some groups of classes are much harder to classify than others, as indicated in Figure \ref{fig:classEffect}. For example, it is much easier to classify house, cat, dog, and tree than distinguishing four different cat species. In fact, distinguishing four different cat species requires expertise in cat species and carefully check on subtle features, i.e. ear size, tail length, coat patterns, and sometimes even personality \cite{cat2018}. Through a series of experiments, we found that classes with low similarity have much higher testing accuracy than classes with high similarity even if the model architecture and the number of classes remain unchanged. Specifically, using a CNN model with 4 convolutional layers and 3 fully connected layers, the accuracy is only 31.49\% to classify baby, boy, girl, man, woman from CIFAR100 while the accuracy would increase to 66.5\% when classifying bottles, bowls, cans, cups and plates. Following along this line of thought, with the same targetting accuracy, models could consume less resource to classify a group of class with high difference. 
 
 To do so, during the pruning process, instead of the original dataset with all possible classes, a specialized dataset with only targetted classes are used and the accuracy on the specialized dataset is used as standard to select the model with least resource consumption and best performance. Evaluations show that the model can achieve the same accuracy with further 20\% less resource consumption to classify house, cat, dog, and tree than distinguishing four different cat species, see section 5. (VALUES TO BE CHANGED)
 
@@ -350,59 +324,48 @@ Also note that in MobileNet \cite{howard2017mobilenets}, reducing resolution is 
 
 
 
-\subsection{Profiler}
-Use online learning method to record and update the distribution consistently. Every C minutes, we will check whether the distribution has changed using xxx statistic formular.
+\subsection{Profiler} \label{profilerSection}
+Profiler detects runtime class skew and makes a series of decisions on whether or not a class skew exists, which model to run, and whether a class-specific pruning is necessary or not. We phrase the runtime class skew detection problem as a oracle Bandit problem \cite{auer2002finite, lai1985asymptotically} and utilize WEG algorithm \cite{shen2016fast} to solve it efficiently.
 
-\subsection{Sharing}
-It has been identified by existing works that multiple applications could process same input stream concurrently. Thus the same classification results could be shared among all applications instead of repeating the computation by each applications. To do so, we build an interface \textit{AppListenser} to get request from all applications and feed back same results to everyone, see section 4.2.
+Let denote a stream of images to be classified as $x_1, \: x_2, \: ...,\: x_i, \: ... \in X = \mathbb{R}^n$ and the corresponding true labels as $y_1, \:y_2, \:...,\:y_i, \:... \in Y = [1, ..., k]$. Assume a partition $\pi: I^+ \rightarrow I^+$ over the stream exists, where each partition maintains a distribution $T_{\pi(i})$ and the image $(x_i, y_i)$ is drawn randomly from distribution $T_{\pi(i)}$. Here, the overall series is an abruptly-changing and piece-wise stationary distribution. At test time, neither true labels $y_i$ nor partition $\pi$ is known. Also we do not have any assumptions on how long a stationary distribution exist. The task of profiler is to detect the stationary distribution when it appears and switch to another stationary distribution when it switches.
 
+The emergence and disapperance of class skew can be detected by the WEG algorithm, as shown in the existing work \cite{shen2016fast}. Since the duration of class skew cannot be decided easily, we detect the class skew in a windoed style, as detailed by WEG() in algorithm \ref{alg: algorithm}, line \ref{alg: WEG}. Every $w_{min}$ frames form a window and we can run the full model on each frame and record the distribution in these $w_{min}$ (= 30) frames. We can further compare the record in $S_j$ and $S_{j-1}$. If the difference in appearance times is less than a threshold $\pi_r$ (=2), we conclude that the previous epoch is continuing and use their concatenation as the estimation of class skew. 
 
-\subsection{Scheduling Model}
-The task of scheduling model is to select a series of models to process the image stream under a resource constrain. The target is to maximize the accuracy while trying to use less energy for each image. The choice is between a cascades of models with different accuracy and different energy consumption. To solve this optimization problem, we build a heuristic algorithm, in Algorithm 1 to allocate energy for each input image, choose the most suitable model given the per frame energy, and wrap all the decisions automatically.
+The detected class skew will be processed by the profiler, as detailed by line \ref{alg: scheduler}. The profiler will import the class-specific pruned models in the model bank if available. If no class-specific pruned model is available, the profiler will call the probability layer to adapt the models immediately. These candidate models will serve further decisions along with recorded properties, i.e. energy and memory consumption, as well as accuracy. Then the profiler estimate the energy per frame by the average of available resource over remaining times and frames. Finally, $ChooseModel$ will return the most accurate model under current resource budget. 
 
-With a process rate of $F$ frames per second and current available energy budget, the perframe energy can be estimated. In concrete, $AllocateEnergy$ (line 11) will retrieve the expected running time and estimate per frame energy by averaging the available energy over all remaining time. Given per frame energy budget and recorded class skew, $ChooseModel$ will return the best model. If no class skew exists, $ChooseModel$ do not need to consider retraining and will choose the model with highest accuracy given current energy budget. When there is class skew, the $ExistedRetrainedModel$ will check whether there are retrained model for current class skew and return a suitable model. When there is no retrained model on disk, the architecture will choose between retraining last few layers and using probability layer. Since retraining is costly, we expect to have enough energy to run that retrained model for at least 10 minutes, otherwise it is more feasible to avoid retraining and use probability layer directly.
-
-The scheduler will wrap up all the algorithms in scheduling model and give the most suitable model. For every input image $i$, The scheduler needs to get the class skew report $r$ from profiler. In the high accuracy mode, enough energy is given to each image such that more freedom in choice of models is allowed. In the efficiency mode, $allocateEnergy$ will estimate per frame energy according to expected remaining running time. Given this per frame energy and class skew report, the chooseModel will give the best model $m$ and the corresponding accuracy $a$. Finnaly, the $scheduler$ will call $execute(i,m)$ to run the model $m$ on input image $i$.
+While original WEG algorithm \cite{shen2016fast} builds a complex scheduling model for trade-off between accuracy benefit and cost from runtime finetuning, our profiler does not need it, since the probability layer produces adapted model efficiently and class-specific pruned model are also not produced during runtime. In addition, the detection of change in class skew can be achieved by equation \ref{eq: recover}, since the probability layer will not interfere the decision when the original model has confidence in its prediction.
 
 
-\begin{algorithm}
- \caption{Scheduling Model}
+
+
+\begin{algorithm} 
+ \small
+ \caption{Windowed e-Greedy (WEG)}
   \begin{algorithmic}[1]
-    \Function{Scheduler}{$i, r, mode$}
-        \State $AE = RemainEnergy()$    
-        \If {mode == HIGHACCURACY}
-            \State $PFE = AE / 600 $ 
-        \ElsIf {mode == EFFICIENCY}
-                \State $PFE = allocateEnergy(AE)$
+    \Function{WEG}{$ $} \label{alg: WEG}
+        \For{$i$ in $1, ..., w_{min}$}
+            \State $y_t \leftarrow h(t)$
+            \State $S_j \leftarrow S_j \oplus [y_t]$
+        \EndFor
+        \If{$|| S_{j-1}, S_j|| \leq \pi_r$}
+            \State $S_j \leftarrow S_{j-1} \oplus S_j$
         \EndIf
-            \State $a, m = chooseModel(PFE, r)$  
-            \State $execute(i,m)$        
+        \State \Return $S_j$
     \EndFunction
-
-    \Function{allocateEnergy}{$AE$}
-        \State $n = RemainingTime()$
-        \State $PFE = AE/n$
-        \State \Return $PFE$
+  
+    \Function{Scheduler}{$i, r$}  \Comment{$r$ denotes current class skew} \label{alg: scheduler}
+        \State $M \leftarrow collectModel(r)$
+        \State $EPF \leftarrow RemainEnergy() / (RemainingTime() \ast F) $
+        \State $a, m \leftarrow chooseModel(EPF, r, M)$  
+        \State $execute(i,m)$        
     \EndFunction
-        \Function{chooseModel}{$PFE, r$}
-        \If{$Parse(r) == NoSkew$}
-            \State $a, m = getModel(PFE)$ 
-        \ElsIf{$Parse(r) == Skew$}
-            \State $a,m = ExistedRetrainedModel(r, PFE)$
-            \If{$m == NULL$}
-                \If{$PFE > \Delta E/600 + FrameCost(m,r)$}
-                    \State $a,m = retrain(m,r)$
-                \Else
-                    \State $a,m = probabilityLayer(m,r)$
-                \EndIf
-            \EndIf
-        \EndIf
-        \State \Return $a,m$
-    \EndFunction
-
-    
 \end{algorithmic}
+ \label{alg: algorithm}
+
 \end{algorithm}
+
+Further, the number of appearance for this class skew will be increased by one and compared with a threshold $\pi_h$. If the class skew has appeared frequently, it will be marked by profiler as the hot class skew and class-specific pruning will be called after the resource constraint on the mobile platform is resolved, i.e. being connected to power and starting to recharge.
+
 
 
 
@@ -423,39 +386,23 @@ Specifically, we implement neuron-wise perforation by increasing strides to redu
 To implement channel-wise perforation, we maintain a global 0-1 mask for all channels indicating whether or not keep the specific channels according to their importance towards accuracy. After masking out the channels, we fill the hole with adjacent channels. \textit{tf.split} can split tensors channel-wise effectively. These splited tensors can be concatenated using \textit{tf.concat} to recover the original number of channels and enable the forward computation with original weights. Layer-wise perforation could be implemented in a similar approach.
 
 
-\paragraph{Profiler}
-Use online learning method to record and update the distribution consistently. Every C minutes, we will check whether the distribution has changed using xxx statistic formular.
 
-
-\begin{table}
-    \centering
-    \begin{tabular}{l|c|c|c|c}
-        \hline
-        Model & Class skew  & Comp. & Mem. & Acc. \\
-        \hline
-        fake & N/A & 2.3 & 123 & 76.5 \\
-        ? & ? & ? & ? & ? \\
-        ? & ? & ? & ? & ? \\
-        ? & ? & ? & ? & ? \\
-        \dots & \dots & \dots & \dots & \dots \\
-        \hline
-    \end{tabular}
-    \vspace{1em}
-    \caption{Model bank.}
-    \label{tab:modelBank}
-\end{table}
 
 \paragraph{Model bank.}
-All the generated models are stored in model bank, as table \ref{tab:modelBank}. Each entry contains the status of a single model, including whether it is a general model or class-specific pruned model, required computation and memory, and the accuracy. \textit{N/A} represents no class skew used in the model. The model bank will support the runtime decision from \texttt{profiler} and only models at the Pareto-optimal bound will be selected for service.
+All the generated models are stored in model bank. Each entry contains the status of a single model, including whether it is a general model or class-specific pruned model, required computation and memory, as well as the accuracy. \textit{N/A} indicates no class skew used in the model. The model bank will support the runtime decision from \texttt{profiler} and only models at the Pareto-optimal bound will be selected for service.
 
+
+
+\subsection{Sharing}
+It has been identified by existing works \cite{guo2018potluck, jiang2018mainstream} that multiple applications could process same input stream concurrently. Thus the same classification results could be shared among all applications instead of repeating the computation by each applications. To do so, we build an interface \textit{AppListenser} to get request from all applications and feed back same results to everyone. 
 
 
 
 \paragraph{AppListener.}
-As the interface, \texttt{AppListener} receives messages from applications containing the input image and required accuracy. Since all real-time applications on the same mobile platform essentially analyze the same input stream, opportunities are created to share the same classification results. To synchronize the requests from all applications, the input images received within a time period will be synchronize into a single one and all related requests will get the same results. As indicated by \cite{jiang2018mainstream}, the choice of this threshold represents a tradeoff between resource efficiency and accuracy. By default, we choose the threshold as a half second.
+As the interface, \texttt{AppListener} receives messages from applications containing the input images and required accuracy. To synchronize the requests from all applications, the input images received within a time period will be averaged into a single one and all related requests will get the same results. As indicated by \cite{guo2018potluck, jiang2018mainstream}, the choice of this threshold represents a tradeoff between resource efficiency and accuracy. By default, we choose the threshold as a half second.
 
 \subsection{APIs and patches to the application code}
-To simplify the usage of SECS service, the user only need to use the interface \textit{request()}, providing the input image and required accuracy. Both classification and pruning will be done by SECS service automatically.
+To simplify the usage of SECS service, the user only need to use the interface \textit{requireAccuracy()}, providing required accuracy, and \textit{requireTime()} indicating how long the system are expected to run. Both classification and pruning will be done by SECS service automatically. In addition, an interface, \textit{register()}, is designed for applications to register in the SECS system.
 
 
 
@@ -517,7 +464,7 @@ We implemented probability layer on DenseNet \cite{huang2017densely} and evaluat
 To show the potential of PCNN, we evaluate probability layer on specialized datasets composed of a various number of classes and class distributions. We begin our experiments by showing that different class combinations have significant influence over the accuracy and probability layer can bring in benefit and perform better than transfer learning on all class combinations. Then we show that probability layer can improve accuracy for any number of classes and make use of unbalanced distribution. We proceed to show that most of the images will have predicted probability higher than $75\%$, which are called \textit{high-confidence images}, and the accuracy among these high-confidence images is $84\%$. Finally, we demonstrate that probability layer is complementary to acceleration methods through combining probability layer with spatial redundancy elimination approach \cite{figurnov2016perforatedcnns} to achieve decreased computation and improved accuracy.
 
 \subsection{Class effect}
-We explore the effect of class combinations and compare the performance of probability layer and transfer learning on various class combinations. Fixing the number of classes as two, we randomly selected five class combinations and compare the original model, model after transfer learning, and the model with probability layer, see figure \ref{fig:classEffectExamples}. We see that with the same model, different class combinations may have dramatically different accuracy. While the original model can achieve a accuracy as 83\% for classifying chair and cup, the accuracy for beaver and bear is only 52.5\%. We can also observe that both transfer learning and probability layer can bring in benefit no matter which two classes compose the dataset while probability layer generally performs better than transfer learning. In the randomly selected five class combinations, probability layer can provide an additional benefit of $2.16\%$ on average. Note that for fox and pine, transfer learning provides a slightly better accuracy than probability layer. We believe that this is due to randomness, especially when considering that transfer learning performs better on all other class combinations. 
+We explore the effect of class combinations and compare the performance of probability layer and transfer learning on various class combinations. Fixing the number of classes as two, we randomly selected five class combinations and compare the original model, model after transfer learning, and the model with probability layer, see Figure \ref{fig:classEffectExamples}. We see that with the same model, different class combinations may have dramatically different accuracy. While the original model can achieve a accuracy as 83\% for classifying chair and cup, the accuracy for beaver and bear is only 52.5\%. We can also observe that both transfer learning and probability layer can bring in benefit no matter which two classes compose the dataset while probability layer generally performs better than transfer learning. In the randomly selected five class combinations, probability layer can provide an additional benefit of $2.16\%$ on average. Note that for fox and pine, transfer learning provides a slightly better accuracy than probability layer. We believe that this is due to randomness, especially when considering that transfer learning performs better on all other class combinations. 
 
 Figure \ref{fig:classEffectSummary} gives a summary of the performance of all three models on the specialized dataset with two and five classes. The figure shows the result from $100$ randomly selected class combinations. We see that, on the original model, while the average accuracy for classifying two classes is $70\%$, the minimum accuracy could be $45\%$ and the maximum accuracy can reach $83\%$, which shows that the accuracy of classifying two classes could change dramatically even using the same model. This observation also holds for transfer learning and probability layer. We can also note that the average accuracy of probability layer is much higher than transfer learning. 
 
@@ -539,13 +486,13 @@ Figure \ref{fig:classEffectSummary} gives a summary of the performance of all th
 \subsection{Results on specialized datasets with only majority classes}
 
 % Third paragraph: Experiment setting
-We explore probability layer's ability on making use of environment when there are only a few majority classes. For each number of classes, we randomly sampled $100$ subsets of classes and present the average accuracy in figure \ref{fig:PLvsRetrain}. We see that significant benefit has been achieved by probability layer for all number of classes. When there are 5 classes, an increase of more than $20\%$ can be achieved without any finetuning. Another point worth noting is that the benefit diminishes gradually as the number of classes increases. Even if there are $40$ classes, a benefit over $10\%$ could still be observed. This shows a significant advantage over previously published results \cite{shen2016fast}, in which no benefit exists when there are more than $15$ classes.
+We explore probability layer's ability on making use of environment when there are only a few majority classes. For each number of classes, we randomly sampled $100$ subsets of classes and present the average accuracy in Figure \ref{fig:PLvsRetrain}. We see that significant benefit has been achieved by probability layer for all number of classes. When there are 5 classes, an increase of more than $20\%$ can be achieved without any finetuning. Another point worth noting is that the benefit diminishes gradually as the number of classes increases. Even if there are $40$ classes, a benefit over $10\%$ could still be observed. This shows a significant advantage over previously published results \cite{shen2016fast}, in which no benefit exists when there are more than $15$ classes.
  
-We compare our results with transfer learning in figure \ref{fig:PLvsRetrain}. For every specialized dataset, we finetune the model for $5$ rounds on a training dataset with the same class combinations and class distribution as the testing dataset. For all selected class numbers, probability layer performs better than transfer learning. This advantage of probability layer over transfer learning increases as the number of classes increase. We contribute this phenomenon to the fact that PCNN has seen more images than transfer learning. Existing papers \cite{yosinski2014transferable} has also reported that transfer learning may destroy the co-adaption between layers and deteriorate the performance on prediction. Another point worth noting is that when the number of classes increases over $90$, retraining would bring worse accuracy than the original model without retraining. In contrast, the probability layer can still bring 2\% advantage over the original model. We believe the reason is that the deterioration of co-adaption between layers leads to a decrease in accuracy and the reduction in the number of classes cannot make up this deterioration when the number of classes is $90$, which is almost same as the original class numbers. Probability layer does not need finetuning and thus avoid this problem. All these observations indicate that probability layer has better ability in using various environment.
+We compare our results with transfer learning in Figure \ref{fig:PLvsRetrain}. For every specialized dataset, we finetune the model for $5$ rounds on a training dataset with the same class combinations and class distribution as the testing dataset. For all selected class numbers, probability layer performs better than transfer learning. This advantage of probability layer over transfer learning increases as the number of classes increase. We contribute this phenomenon to the fact that PCNN has seen more images than transfer learning. Existing papers \cite{yosinski2014transferable} has also reported that transfer learning may destroy the co-adaption between layers and deteriorate the performance on prediction. Another point worth noting is that when the number of classes increases over $90$, retraining would bring worse accuracy than the original model without retraining. In contrast, the probability layer can still bring 2\% advantage over the original model. We believe the reason is that the deterioration of co-adaption between layers leads to a decrease in accuracy and the reduction in the number of classes cannot make up this deterioration when the number of classes is $90$, which is almost same as the original class numbers. Probability layer does not need finetuning and thus avoid this problem. All these observations indicate that probability layer has better ability in using various environment.
 
 
 \subsection{High confidence, high accuracy}
-We justify our design of threshold in probability layer by exhibiting the percentage of images with predicted probability layer higher than the various threshold and the accuracy of these images, see figure \ref{fig:threshold}. While the original DenseNet has top-1 accuracy as $73\%$, the accuracy increase to $83\%$ when we set the threshold $\omega$ to be $75\%$. When we increase furtherly the threshold $\omega$ to be $99\%$, the accuracy would increase to $95.01\%$. Thus when a model has strong confidence in its prediction, we should better believe in the model instead of rescaling. 
+We justify our design of threshold in probability layer by exhibiting the percentage of images with predicted probability layer higher than the various threshold and the accuracy of these images, see Figure \ref{fig:threshold}. While the original DenseNet has top-1 accuracy as $73\%$, the accuracy increase to $83\%$ when we set the threshold $\omega$ to be $75\%$. When we increase furtherly the threshold $\omega$ to be $99\%$, the accuracy would increase to $95.01\%$. Thus when a model has strong confidence in its prediction, we should better believe in the model instead of rescaling. 
 
 We also note that a large portion of images can get a high predicted probability from the original model. For instance, there are more than 60\% images get predicted probability higher than 95\%. For these images that the original model has strong confidence in its prediction, the probability layer will not interfere with the decision. The probability layer will step in when the original model is not sure and give suggestion to the probability layer according to the environment information. 
 
@@ -570,7 +517,7 @@ We also note that a large portion of images can get a high predicted probability
 
 
 \subsection{Results on specialized datasets with both majority and minority classes}
-We evaluate the probability layer on the noisy environment, in which a few major classes occupies most of the images while a huge number of minority classes also appear. Figure \ref{fig:variousDistribution5} and figure \ref{fig:variousDistribution10} shows the results when the numbers of majority classes are five and ten respectively. While the weight of majority classes increases from $50$\% to $100$\%, probability layer performs consistently better than the transfer learning for $5$ or $1$ rounds. Even if we finetune the model for $30$ rounds, probability layer still performs better when the weight of major classes is relatively small. When the weights increase further, the advantage of finetuning for $30$ rounds is at most $0.5$\%. Considering the intensive energy-consumption and time latency of retraining for $30$ rounds, this benefit of $0.5$\% advantage is not so significant, especially on devices which require the real-time response and has strict energy budget. We should also note that retraining for $1$ rounds would make the accuracy to be much lower than original model when the weight of major classes is less than 75\%. Since we need to choose a method before we start in automatically using environment information, we can conclude that probability layer is the most suitable method.
+We evaluate the probability layer on the noisy environment, in which a few major classes occupies most of the images while a huge number of minority classes also appear. Figure \ref{fig:variousDistribution5} and Figure \ref{fig:variousDistribution10} shows the results when the numbers of majority classes are five and ten respectively. While the weight of majority classes increases from $50$\% to $100$\%, probability layer performs consistently better than the transfer learning for $5$ or $1$ rounds. Even if we finetune the model for $30$ rounds, probability layer still performs better when the weight of major classes is relatively small. When the weights increase further, the advantage of finetuning for $30$ rounds is at most $0.5$\%. Considering the intensive energy-consumption and time latency of retraining for $30$ rounds, this benefit of $0.5$\% advantage is not so significant, especially on devices which require the real-time response and has strict energy budget. We should also note that retraining for $1$ rounds would make the accuracy to be much lower than original model when the weight of major classes is less than 75\%. Since we need to choose a method before we start in automatically using environment information, we can conclude that probability layer is the most suitable method.
 
 
 \begin{figure}[t]
@@ -619,14 +566,6 @@ We first apply the probability layer to the network. Then we apply the spatial r
     \end{tabular}
 \end{table}
 
-
-\subsection{Detection overhead}
-The fundamental of using runtime distribution is detecting runtime distribution, mainly focused on the number of classes and what classes are appearing. Profiler is the component in \textit{SECS} taking care of this detection. As images come, full models will classify these images and profiler will store the results. For every $120$ processed images, the profiler will calculate the distribution of these classified images and compare with the distribution for last $120$ images. We choose $120$ because generally we will process $1$ image per seconds and $120$ images will represent the distribution of classes in two minutes. Assuming there are $n$ classes in the full model, the frequency of each class will be recorded as $f_i$, which is the proportion that this class appears. The profiler will calculate the difference between two distributions by 
-\begin{equation}
-    distance = \sum_{i = 1}^{n}(f_i^1 - f_i^2)
-\end{equation}
-, where $f_i^1$ is the frequency of class $i$ in the first distribution and $f_i^2$ is the frequency of class $i$ in the second distribution. If the distance is less than $0.5$, we will claim that distribution has been stabilized and a runtime distribution has been detected. Fig \ref{fig:distributionDistance} shows profiler performance. In fig \ref{fig:distributionDistance1}, the blue histogram is the distribution of distance when all images are selected from class $0$ to $4$ and the green histogram is the distribution of distance when images comes from classes $0$ to $4$ and $1$ to $5$ alternately. If the distance between two distribution is less than $0.4$, we can assert that classes in these two consecutive time period are same. In fig \ref{fig:distributionDistance2}, the meaning of blue and green histogram are same as in fig \ref{fig:distributionDistance1}. The only difference is that the groups of classes in fig \ref{fig:distributionDistance2} is $0$ to $4$ and $3$ to $7$, where class groups have less overlap than fig \ref{fig:distributionDistance1}. In this case, the distance between two histograms larger. As we decrease the overlap further, the distance between two histograms will become larger. Thus the choice of $0.4$ as detection criterion works. Based on these experiments, four minutes or $240$ images would be enough for detecting runtime class distribution.
-
 \begin{figure*}
 \centering
 \begin{subfigure}{.5\textwidth}
@@ -645,44 +584,40 @@ The fundamental of using runtime distribution is detecting runtime distribution,
 \caption{Graphs showing the distance between data distribution of two classes groups}
 \label{fig:distributionDistance}
 \end{figure*}
+\subsection{Detection overhead}
+The fundamental of using runtime distribution is detecting runtime distribution, mainly focused on the number of classes and what classes are appearing. Profiler is the component in \textit{SECS} taking care of this detection. As images come, full models will classify these images and profiler will store the results. For every $120$ processed images, the profiler will calculate the distribution of these classified images and compare with the distribution for last $120$ images. We choose $120$ because generally we will process $1$ image per seconds and $120$ images will represent the distribution of classes in two minutes. Assuming there are $n$ classes in the full model, the frequency of each class will be recorded as $f_i$, which is the proportion that this class appears. The profiler will calculate the difference between two distributions by 
+\begin{equation}
+    distance = \sum_{i = 1}^{n}(f_i^1 - f_i^2)
+\end{equation}
+, where $f_i^1$ is the frequency of class $i$ in the first distribution and $f_i^2$ is the frequency of class $i$ in the second distribution. If the distance is less than $0.5$, we will claim that distribution has been stabilized and a runtime distribution has been detected. Fig \ref{fig:distributionDistance} shows profiler performance. In fig \ref{fig:distributionDistance1}, the blue histogram is the distribution of distance when all images are selected from class $0$ to $4$ and the green histogram is the distribution of distance when images comes from classes $0$ to $4$ and $1$ to $5$ alternately. If the distance between two distribution is less than $0.4$, we can assert that classes in these two consecutive time period are same. In fig \ref{fig:distributionDistance2}, the meaning of blue and green histogram are same as in fig \ref{fig:distributionDistance1}. The only difference is that the groups of classes in fig \ref{fig:distributionDistance2} is $0$ to $4$ and $3$ to $7$, where class groups have less overlap than fig \ref{fig:distributionDistance1}. In this case, the distance between two histograms larger. As we decrease the overlap further, the distance between two histograms will become larger. Thus the choice of $0.4$ as detection criterion works. Based on these experiments, four minutes or $240$ images would be enough for detecting runtime class distribution.
 
 
 
+\newpage
+\clearpage
 \section{Related Work} \label{relatedWork}
-\paragraph{Environment Information}
+SECS is a real-time deep stream processing system utilizing runtime class skew efficiently and conducting class specific pruning automatically.
 
-% Talk about the scenario
-Many papers have talked about the difference between testing CNN models in the lab setting and in the wild. In lab setting, the prevalent benchmarks, like ImageNet \cite{deng2009imagenet} and CIFAR100 \cite{krizhevsky2009learning}, all assumes equal number of images for each class. However, in a more realistic setting \cite{han2016mcdnn, shen2016fast}, different classes may have dramatically different frequency and the distribution may also change over time. The question we want to answer is that, given an environment with a number of classes and distribution, how to use this information? All of the existing works \cite{han2016mcdnn, shen2016fast} only use transfer learning to retrain the last few layers, which would introduce a huge amount of energy consumption and time latency. Our method will make use of the distribution efficiently without finetuning, thus avoid additional energy-consumption and time latency.
-
-% Unbalanced dataset
-\paragraph{Unbalanced dataset}
-Unbalanced datasets focus on the problem that training dataset has different distribution with the testing dataset, which is related to our scenario. One key point of the unbalanced dataset is that the minor classes in the training dataset cannot gain same attention as the major classes, thus oversampling on minor classes or undersampling on major classes will be implemented to generate a balanced dataset \cite{hoens2012learning, van2007experimental, wang2016dealing}. Our scenario is different since we assume that we have a model pretrained on a balanced dataset and in the testing time the class distribution changes. Another key point of the unbalanced dataset is that in the running time, as the distribution changes, the model will keep updating as new inputs come and finetuning is constantly needed. Our method avoids retrain at all and could achieve the same or better performance by only changing a few parameters according to the distribution automatically. Thus energy efficiency and speedup could be achieved by our solution.
+\paragraph{Class skew}
+Using class skew is an emerging method for both increasing accuracy and decreasing resource consumption \cite{han2016mcdnn, kang2017noscope, shen2016fast}. Our paper is distinguished from existing papers from two main points. First, we bring up probability layer to efficient adapt the model with no overhead, while existing papers relies on transfer learning to finetune the model towards the class skew during runtime. Specifically, our probability layer introduce no overhead into the runtime model adaption, which fits more for the resource-limited nature on mobile platforms. Secondly, we identify the class skew dichotomy and bring up two modes, interpretation and compilation, to optimize model differently according to whether a class skew is hot or not. Third, we propose class-specific pruning and bring up perforation to efficiently select the smallest model according to whether the targetting class groups is hard to classify or not.
 
 
 % Talk about transfer learning
 \paragraph{Transfer learning}
-Transfer learning has shown benefit in domain adaption and currently is the dominant method, if not the only one, for domain adaption. To solve the problem that the testing dataset is small, we use transfer learning \cite{oquab2014learning}. To use unsupervised dataset \cite{doersch2015unsupervised, noroozi2016unsupervised}, we use transfer learning. Assume we have a large model handling $1000$ classes and in an environment where only $10$ classes appearing, we still use transfer learning \cite{han2016mcdnn, shen2016fast}. Transfer learning has become the only method off the top of the head when we consider the change in classes. Although transfer learning shows various benefit, it also has intrinsic shortage residing in the process of training a CNN model. First, it is hard to decide how many layers we should freeze. Published papers \cite{yosinski2014transferable} reported that freezing fewer layers leads to better performance on different domains and freezing more layers lead to a better performance on similar domains since the co-adapted interactions between layers will be kept. However, it is still hard to decide whether two domains are similar enough and the exact effect of freezing a various number of layers. Second, it is hard to decide the hyper-parameters unless actually trying different settings. When choosing epoch numbers, it is hard to predict whether the model will converge or collapse after a pre-chosen number of epochs. The choice of learning rate also depends on both model and dataset. The choice of hyper-parameter needs expertise in finetuning, which is lacked by the automatical product. Third, the long latency and energy consumption of training a model obstacle the transfer learning on energy-efficient devices, especially in an environment that class number and distributions keep changing. Our method can avoid retraining at all while adapting to the new dataset, thus all the inconvenience related to retraining is avoided naturally.
+Transfer learning has shown benefit in domain adaption and currently is the dominant method, if not the only one, for domain adaption. To solve the problem that the testing dataset is small, we use transfer learning \cite{oquab2014learning}. To use unsupervised dataset \cite{doersch2015unsupervised, noroozi2016unsupervised}, we use transfer learning. Assume we have a large model handling $1000$ classes and in an environment where only $10$ classes appearing, we still use transfer learning \cite{han2016mcdnn, shen2016fast}. Transfer learning has become the only method off the top of the head when we consider the change in classes. Although transfer learning shows various benefit, it also has intrinsic shortage residing in the process of training a CNN model. First, it is hard to decide how many layers we should freeze. Published papers \cite{yosinski2014transferable} reported that freezing fewer layers leads to better performance on different domains and freezing more layers lead to a better performance on similar domains since the co-adapted interactions between layers will be kept. However, it is still hard to decide whether two domains are similar enough and the exact effect of freezing a various number of layers. Second, transfer learning is hard to be conducted unless different settings has been tried. When choosing epoch numbers, it is hard to predict whether the model will converge or collapse after a pre-chosen number of epochs. The choice of learning rate also depends on both model and dataset. The choice of hyper-parameter needs expertise in finetuning, which is lacked by the automatical product. Third, the long latency and energy consumption of training a model obstacle the transfer learning on energy-efficient devices, especially in an environment that class number and distributions keep changing. Our approach, probability layer, can avoid finetuneing at all while adapting to the new dataset, thus all the inconvenience related to finetuneing is avoided naturally.
 
-\paragraph{Distillation}
-Distillation has been discussed extensively in machine learning area \cite{hinton2015distilling, ba2014deep, dauphin2013big, chen2017learning, lopez2015unifying, kim2015compression,bucilu2006model}. With distillation, we can use a smaller model to learn a complex model, get a better performance than the small model, and consume less energy than the complex model. Thus distillation naturally fits great with energy-efficiency on mobile device. However, neither the distillation people nor the mobile energy efficiency people considered combining these two techniques together. We are the first to introduce distillation into mobile energy efficiency. We solved obstacles in both side. First, existing distillation methods could only learn a large model when there are equal number of nodes in the softmax layer while our method could proceed no matter the difference between these two numbers. Second, existing papers could either only retrain last few layers \cite{li2015towards}, which lose the ability to change model architecture, or retrain the model from scratch \cite{han2016mcdnn, kang2017noscope, shen2016fast}, which lose the information contained in large model. Introducing distillation into runtime optimization can solve these problems perfectly.
+\paragraph{Model architecture selection.}
+To generate a cascade of models with different resource consumption and performance, existing papers utilize hand-selected architectures, which is not a automatical procedure and only a small number of hyperparameters can be tested. Specifically, NoScope \cite{kang2017noscope} only performs model search by varying the number of convolutional layers (2 or 4), number of convolution units in the base layer (32 or 64), and number of neurons in the fully connected layer (32, 64, 128, or 256). MCDNN \cite{han2016mcdnn} chooses between reduce number of nodes in fully connected layers, decrease number of kernels, and eliminate convolutional layers entirely. FastVideo \cite{shen2016fast} also manually removes layers, decreases kernel sizes, increases kernel strides, and reduces the size of fully-connected layers, to generate a cascade of models with the tradeoff between accuracy and resource consumption. All these manually selected architectures requires human interfere. We observe that the difficulty comes from getting the exact accuracy of each architecture and loose the target to be collecting the relative performance of a sequence of architectures. Further, we bring up perforation to automatically se-lect hyper-parameters according to the targetting classeswithout any finetuning during the selection process.
 
-\paragraph{Specialization}
-Use specialization to generate a series of models composing trade-off between accuracy and energy is an emerging method for solving energy efficiency problem on mobile devices \cite{han2016mcdnn, kang2017noscope, shen2016fast}. Generally the reduction in energy is achieved by reducing number of layers and the resulting decrease in accuracy is made up by reducing number of nodes in the softmax layer. Although existing papers introduced a new way to solve the energy efficiency problem, the implementation detail is very coarse-grained and there are lots of open questions to be answered. Instead of only considering number of classes in the runtime, our paper took class correlation into consideration and introduced semantic tree as a quantitative method describing similarity between classes. Based on the numeric metric, we brought up guided search to replace exhaustive search used in existing papers. The second contribution is to introduce distillation and varying input size into runtime optimization. Previously, the only method employed in this area is to reducing number of layers. We found that input size is also a simple but effective in specialization. Finally, \textit{probability layer} was proposed to act as cold-start, solved the time latency introduced by retraining, and gives more choice for the scheduling model.
 
 \paragraph{Model compression}
-Model compression is to compress CNN architecture through matrix factorization and matrix pruning. Matrix factorization \cite{jaderberg2014speeding, kim2015compression, romero2014fitnets, xue2014singular} means using the multiplication of two low rank matrices to replace a single high rank matrix. Matrix pruning \cite{chen2015compressing, han2015learning} is to transform a matrix into sparse matrix by pruning small digits to be zero. Both directions of model compression do not change the number of nodes in the softmax layer or the model architecture. Thus techniques in model compression is orthogonal to using runtime distribution and could provide further optimization after reducing number of classes. 
-
+Various model compression methods has been brought up, including matrix factorization \cite{jaderberg2014speeding, kim2015compression, romero2014fitnets, xue2014singular}, matrix pruning \cite{chen2015compressing, han2015learning}, and distillation \cite{hinton2015distilling, ba2014deep, dauphin2013big, chen2017learning, lopez2015unifying, kim2015compression,bucilu2006model}. Matrix factorization utilizes the multiplication of two low rank matrices to replace a single high rank matrix. In matrix pruning, the matrix is transformed into sparse matrix by pruning small digits to be zero. Distillation is another pruning methods, in which a complex model can teach a smaller model to get a better performance and the smaller model can replace the complex model for the reduction in resource consumption. After we conduct class-specific pruning, all these methods could be utilized to further reduce resource consumption, which will be covered in the future work.
 
 \paragraph{Early stop}
 Early stop \cite{teerapittayanon2016branchynet, panda2016conditional} is an architecture with branches and will stop calculating once a branch is enough confident that an image has been classified correctly. Early stop contains various architectures to achieve energy efficiency through reducing unnecessary computation. This is orthogonal to runtime specialization and could be included into the model bank.
 
-
-To generate a cascade of models with different resource consumption and performance, existing papers utilize hand-selected architectures, which is not a automatical procedure and only a small number of hyperparameters can be tested. Specifically, NoScope \cite{kang2017noscope} only performs model search by varying the number of convolutional layers (2 or 4), number of convolution units in the base layer (32 or 64), and number of neurons in the fully connected layer (32, 64, 128, or 256). MCDNN \cite{han2016mcdnn} chooses between reduce number of nodes in fully connected layers, decrease number of kernels, and eliminate convolutional layers entirely. FastVideo \cite{shen2016fast} also manually removes layers, decreases kernel sizes, increases kernel strides, and reduces the size of fully-connected layers, to generate a cascade of models with the tradeoff between accuracy and resource consumption. All these manually selected architectures requires human interfere. Automatic pruning is challenge since once we change the model architecture we cannot precess an image and get the accuracy until the model is trained again. We cannot even get a cascade of models with decreasing accuracy before we train and test the architectures one by one. To make system framework for mobile platforms and model pruning towards runtime class skew more feasible, it is necessary to find an approach pruning models automatically and generate a cascade of models with decreasing accuracy without training.
-
-
-
 \section{Conclusion and Future Work} \label{conclusion}
-We have presented probability layer which exploits runtime environment information to increase prediction accuracy. Probability layer requires only a single extra layer after the general CNN models with unnoticeable extra computation and obtains a boost in accuracy. Compared to transfer learning, probability layer achieves comparable or even better accuracy boost, avoids retraining, and maintain the ability to detect new classes. Additionally, probability layer can be combined with acceleration methods which exploit various types of network redundancy to achieve further speedups.
+We have presented SECS, a real-time deep stream processing system. We identified an environment class skew, that is easily available and can both increase accuracy and decrease resource consumption. To efficiently utilize the runtime class skew, we bring up probability layer, which is easy to implement and can role as a highly flexible add-on module to existing methods. We further identified the class skew dichotomy. To aggressively prune the model towards the hot class skews, we propose class-specific pruning methods, which can bring extra benefit based on whether not a group of classes is easy to classify.
 
 
 
