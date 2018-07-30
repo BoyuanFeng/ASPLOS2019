@@ -260,26 +260,42 @@ If a model have a strong confidence in its prediction, the accuracy would be muc
 
 
 
-\subsection{Perforation}
-In this section, we introduce perforation, a pruning method on three levels, i.e. neuron-wise, channel-wise, and layer-wise, as well as class-specific optimization. 
+\subsection{Class-specific pruning}
+In this section, we introduce class-specific pruning, which can optimize the model architecture based on which classes will appear. Then, we bring up perforation to speed up class-specific pruning, which is a pruning method on three levels, i.e. neuron-wise, channel-wise, and layer-wise.
+
+
+\paragraph{Class-specific pruning.} 
+We observe that some groups of classes are much harder to classify than others, as indicated in Figure \ref{fig:classEffect}. For example, it is much easier to classify house, cat, dog, and tree than distinguishing four different cat species. In fact, distinguishing four different cat species requires expertise in cat species and carefully check on subtle features, i.e. ear size, tail length, coat patterns, and sometimes even personality \cite{cat2018}. Through a series of experiments, we found that classes with low similarity have much higher testing accuracy than classes with high similarity even if the model architecture and the number of classes remain unchanged. Specifically, using a CNN model with 4 convolutional layers and 3 fully connected layers, the accuracy is only 31.49\% to classify baby, boy, girl, man, woman from CIFAR100 while the accuracy would increase to 66.5\% when classifying bottles, bowls, cans, cups and plates. Following along this line of thought, with the same targetting accuracy, models could consume less resource to classify a group of classes with high difference. 
+
+To do so, during the hyper-parameter selection process, instead of the original dataset with all possible classes, a specialized dataset with only targetted classes are used and the accuracy on the specialized dataset is treated as standard to select the model with least resource consumption and best performance. Class-specific pruning is challenging since hyper-parameter selection process is time consuming. For every new sets of hyper-parameters, the model need to be retrained, which may take days or even weeks. Perforation is brought up to reduce the overhead, as detailed in section \ref{perforation}.
+
+Also note that class similarity is orthogonal to number of classes since number of classes consider how many classes have appeared in a scenario and class similarity considers how similar the group of classes are to each other, which is orthogonal to number of classes. Thus the class specific pruning could be used simultaneously with probability layer.
+
+
+\subsubsection{Perforation} \label{perforation}
+
+
+
+
+Perforation could be used both as general pruning technique and class-specific pruning technique. As a general pruning technique, perforation can produce an automtically selected model with 600x less parameters with AlexNet-Level accuracy, while SqueezeNet \cite{iandola2016squeezenet}, a hand-selected architecture, can only use 50x less parameters with AlexNet-Level accuracy. As a class-specific pruning methods, the automatically generated model can achieve the same accuracy with further 20\% less resource consumption to classify house, cat, dog, and tree than distinguishing four different cat species, see section \ref{evaluation}. (VALUES TO BE CHANGED)
+
+
+
+\paragraph{Intuition. } The motivation for perforation is the observation that in the hyper-parameter selection process, we only need the relative performance of models instead of the exact accuracy. Inspired by techniques from the source code optimization \cite{figurnov2016perforatedcnns}, we use perforation to recover the skipped positions after we delete the most unsalient positions towards the accuracy. The positions here could be layer-wise, channel-wise, or neuron-wise. 
+
+
 
 \paragraph{Layer-wise perforation.}
-We introduce a global mask to temporally mask out unsalient filters in each iteration based on a pretrained model. Therefore, equation \ref{eq:1} can be rewritten as:
+We introduce a global mask $M$ to temporally mask out unsalient filters in each iteration based on a pretrained model. Therefore, equation \ref{eq:1} can be rewritten as:
 \begin{equation} \label{eq: 2}
     \mathcal{Z}_l = M_l \cdot f(\mathcal{Z}_{l_1} \ast \mathcal{W}_l), \ \ \  s.t. \: l = 1,\: 2, \: \dots, \: L,
 \end{equation}
-where $M_l \in {0, 1}$ is a mask with a binary value. $M_l = 1$ if the $l$-th layer is salient, and $0$ otherwise. $\cdot$ denotes the point-wise product. By masking out certain layer as zero, we can view it as skip the computation of this layer. This operation will make the input to the next layer to be zero and requires finetuning to continue. Instead, we perforate the skipped layer by previous layers, which can maintain the input tensor size to the next layer and continue prediction without finetuning. Thus equation \ref{eq: 2} can be rewritten as:
+where $M_l \in \{0, 1\}$ is a mask with a binary value. $M_l = 1$ if the $l$-th layer is salient, and $0$ otherwise. $\cdot$ denotes the point-wise product. By masking out certain layer as zero, we can view it as skipping the computation of this layer. This operation will make the input to the next layer to be zero and requires finetuning to continue. Instead, we perforate the skipped layer by concatenating same number of channels from previous layers, which can maintain the input tensor size to the next layer and continue prediction without finetuning. Thus equation \ref{eq: 2} can be rewritten as:
 \begin{equation}
     \mathcal{Z}_l = g(m_l, f(f(\mathcal{Z}_{l_1} \ast \mathcal{W}_l)), Z_{l-1}), \ \ \  s.t. \: l = 1,\: 2, \: \dots, \: L,
 \end{equation}
-where
-\begin{equation}
-    g(x, y, z) = 
-    \begin{cases}
-        y &\text{se $x = 1$}\\
-        z &\text{se $x = 0$}
-    \end{cases}
-\end{equation}
+where $g(x,y,z)  \delequal \; $if $x = 1$, return $y$, otherwise return $z$.
+
 The problem to prune the most unsalient layers until there are only $K$ layers can be rephrased as an optimization problem:
 \begin{equation*}
 \begin{aligned}
@@ -297,30 +313,20 @@ To solve this problem, we provide a heuristic algorithm. In each round, we will 
 \end{equation}
 where $m_l = 1$ if the $l$-th filter is salient, and $0$ otherwise. $\odot$ denotes the channel-wise product. By masking out certain channels as zero, we can view it as skipping the computation of this layer. For the reason of continue computation, we perforate the skipped channels by previous channels. Similar to the heuristic algorithm in layer-wise perforation, we can prune channels in a one-by-one approach.
 
-\paragraph{Neuron-wise perforation.} We choose to increase strides to skip neurons instead of using a mask to identify important neurons in each feature maps. The reason is that, as indicated in xxxxx, this process may introduce irregularity in the computation of neurons and overhead on computation will be introduced. By increasing strides, we can still skip some neurons while there are mature implementation of increasing strides.
+\paragraph{Neuron-wise perforation.} We choose to increase strides to skip neurons instead of using a mask to identify important neurons in each feature maps. The reason is that, as indicated in \cite{aklaghi2018snapea, buckler2018eva, hegde2018ucnn}, this process may introduce irregularity in the computation of neurons and overhead on computation will be introduced. By increasing strides, we can still skip some neurons while there are mature implementation of increasing strides.
 
+%\paragraph{Speed up perforation}
+%In the procedure of pruning, we generate a cascade of models with decreasing accuracy. When redundancy in architecture is abundant, a single step in the perforation may only decrease the accuracy by less than $0.1$\%. However, we do not require a too fine-grained cascade since it indicates a larger number of models and more disk consumption. Instead, SECS service would require the user to define a threshold on the required granularity and adjust the perforation rate during the pruning procedure to maintain a cascade with required granularity (=1\% in our implementation). 
 
-
-
-\paragraph{Class-specific pruning.} 
-We observe that some groups of classes are much harder to classify than others, as indicated in Figure \ref{fig:classEffect}. For example, it is much easier to classify house, cat, dog, and tree than distinguishing four different cat species. In fact, distinguishing four different cat species requires expertise in cat species and carefully check on subtle features, i.e. ear size, tail length, coat patterns, and sometimes even personality \cite{cat2018}. Through a series of experiments, we found that classes with low similarity have much higher testing accuracy than classes with high similarity even if the model architecture and the number of classes remain unchanged. Specifically, using a CNN model with 4 convolutional layers and 3 fully connected layers, the accuracy is only 31.49\% to classify baby, boy, girl, man, woman from CIFAR100 while the accuracy would increase to 66.5\% when classifying bottles, bowls, cans, cups and plates. Following along this line of thought, with the same targetting accuracy, models could consume less resource to classify a group of class with high difference. 
-
-To do so, during the pruning process, instead of the original dataset with all possible classes, a specialized dataset with only targetted classes are used and the accuracy on the specialized dataset is used as standard to select the model with least resource consumption and best performance. Evaluations show that the model can achieve the same accuracy with further 20\% less resource consumption to classify house, cat, dog, and tree than distinguishing four different cat species, see section 5. (VALUES TO BE CHANGED)
-
-Also note that class similarity is orthogonal to number of classes since number of classes consider how many classes have appeared in a scenario and class similarity considers how similar the group of classes are to each other, which is orthogonal to number of classes. Thus the class specific pruning could be used simultaneously with probability layer.
-
-\paragraph{Speed up perforation}
-In the procedure of pruning, we generate a cascade of models with decreasing accuracy. When redundancy in architecture is abundant, a single step in the perforation may only decrease the accuracy by less than $0.1$\%. However, we may not require a too fine-grained cascade since it indicates a larger number of models and more disk consumption. Instead, SECS service would require the user to define a threshold on the required granularity and adjust the perforation rate during the pruning procedure to maintain a cascade with required granularity. 
-
-We utilize control theory to speed up perforation. When the accuracy remains similar, we will increase the perforation speed, i.e. decrease more channels, layers or increase more strides during the same perforation step.
+%We utilize control theory to speed up perforation. When the accuracy remains similar, we will increase the perforation speed, i.e. decrease more channels, layers or increase more strides during the same perforation step.
 
 \paragraph{Search suitable architectures.}
 During the procedure of perforation, we can generate a cascade of models with decreasing resource computation and performance. To find the model with targetted accuracy, we do not need to finetune all models. Instead, based on the property of decreasing accuracy, we can test the models in a binary search approach, which would only take logarithm times.
 
 \paragraph{Discussion on reducing resolution}
-Reducing resolution has been reported as an effective approach in optimizing architecture \cite{krizhevsky2009learning, fu2017look, howard2017mobilenets}. Reducing resolution indicates the proportional reduction in feature map sizes in all layers and thus both reduce computation and memory consumption proportionally. However, reducing resolution force the reduction in feature maps sizes in a uniformly way across all layers. We argue that reducing uniformly is infeasible since different positions in the architecture has different degree of redundancy. Instead, perforation could reduce feature map sizes, channel numbers, and layer numbers according to the redundancy in different positions and prune the architecture correspondingly, which would introduce more optimization with less penalty in accuracy. Actually, reducing resolution is equivalent to add a pooling layer before the whole architecture or increase strides in the first layer, which is covered by perforation and could be selected when feasible.
+Reducing resolution has been reported as an effective approach in optimizing architecture \cite{krizhevsky2009learning, fu2017look, howard2017mobilenets}. Reducing resolution indicates the proportional reduction in feature map sizes in all layers and thus both reduces computation and memory consumption proportionally. However, reducing resolution forces the reduction in feature maps sizes in a uniformly way across all layers. We argue that reducing uniformly is infeasible since different positions in the architecture has different degree of redundancy. Instead, perforation could reduce feature map sizes, channel numbers, and layer numbers according to the redundancy in different positions and prune the architecture correspondingly, which would introduce more optimization with less penalty in accuracy. Actually, reducing resolution is equivalent to add a pooling layer before the whole architecture or increase strides in the first layer, which is covered by perforation and could be selected when feasible.
 
-Also note that in MobileNet \cite{howard2017mobilenets}, reducing resolution is utilized by adding an extra hyper-parameter selected by hand, which becomes an obstacle for users who are not familiar with CNN architectures. Instead, perforation selects in an end-to-end automatic way and hide procedures from user.
+Also note that in MobileNet \cite{howard2017mobilenets}, reducing resolution is utilized by adding an extra hyper-parameter selected by hand, which becomes an obstacle for users who are not familiar with CNN architectures. Instead, perforation selects in an end-to-end automatic way and hide procedures from users.
 
 
 
@@ -330,11 +336,6 @@ Profiler detects runtime class skew and makes a series of decisions on whether o
 Let denote a stream of images to be classified as $x_1, \: x_2, \: ...,\: x_i, \: ... \in X = \mathbb{R}^n$ and the corresponding true labels as $y_1, \:y_2, \:...,\:y_i, \:... \in Y = [1, ..., k]$. Assume a partition $\pi: I^+ \rightarrow I^+$ over the stream exists, where each partition maintains a distribution $T_{\pi(i})$ and the image $(x_i, y_i)$ is drawn randomly from distribution $T_{\pi(i)}$. Here, the overall series is an abruptly-changing and piece-wise stationary distribution. At test time, neither true labels $y_i$ nor partition $\pi$ is known. Also we do not have any assumptions on how long a stationary distribution exist. The task of profiler is to detect the stationary distribution when it appears and switch to another stationary distribution when it switches.
 
 The emergence and disapperance of class skew can be detected by the WEG algorithm, as shown in the existing work \cite{shen2016fast}. Since the duration of class skew cannot be decided easily, we detect the class skew in a windoed style, as detailed by WEG() in algorithm \ref{alg: algorithm}, line \ref{alg: WEG}. Every $w_{min}$ frames form a window and we can run the full model on each frame and record the distribution in these $w_{min}$ (= 30) frames. We can further compare the record in $S_j$ and $S_{j-1}$. If the difference in appearance times is less than a threshold $\pi_r$ (=2), we conclude that the previous epoch is continuing and use their concatenation as the estimation of class skew. 
-
-The detected class skew will be processed by the profiler, as detailed by line \ref{alg: scheduler}. The profiler will import the class-specific pruned models in the model bank if available. If no class-specific pruned model is available, the profiler will call the probability layer to adapt the models immediately. These candidate models will serve further decisions along with recorded properties, i.e. energy and memory consumption, as well as accuracy. Then the profiler estimate the energy per frame by the average of available resource over remaining times and frames. Finally, $ChooseModel$ will return the most accurate model under current resource budget. 
-
-While original WEG algorithm \cite{shen2016fast} builds a complex scheduling model for trade-off between accuracy benefit and cost from runtime finetuning, our profiler does not need it, since the probability layer produces adapted model efficiently and class-specific pruned model are also not produced during runtime. In addition, the detection of change in class skew can be achieved by equation \ref{eq: recover}, since the probability layer will not interfere the decision when the original model has confidence in its prediction.
-
 
 
 
@@ -363,6 +364,14 @@ While original WEG algorithm \cite{shen2016fast} builds a complex scheduling mod
  \label{alg: algorithm}
 
 \end{algorithm}
+
+
+The detected class skew will be processed by the profiler, as detailed by line \ref{alg: scheduler}. The profiler will import the class-specific pruned models in the model bank if available. If no class-specific pruned model is available, the profiler will call the probability layer to adapt the models immediately. These candidate models will serve further decisions along with recorded properties, i.e. energy and memory consumption, as well as accuracy. Then the profiler estimate the energy per frame by the average of available resource over remaining times and frames. Finally, $ChooseModel$ will return the most accurate model under current resource budget. 
+
+While original WEG algorithm \cite{shen2016fast} builds a complex scheduling model for trade-off between accuracy benefit and cost from runtime finetuning, our profiler does not need it, since the probability layer produces adapted model efficiently and class-specific pruned model are also not produced during runtime. In addition, the detection of change in class skew can be achieved by equation \ref{eq: recover}, since the probability layer will not interfere the decision when the original model has confidence in its prediction.
+
+
+
 
 Further, the number of appearance for this class skew will be increased by one and compared with a threshold $\pi_h$. If the class skew has appeared frequently, it will be marked by profiler as the hot class skew and class-specific pruning will be called after the resource constraint on the mobile platform is resolved, i.e. being connected to power and starting to recharge.
 
@@ -413,47 +422,7 @@ To simplify the usage of SECS service, the user only need to use the interface \
 
 \section{Evaluation} \label{evaluation}
 
-
-
-
-
-
-
-
-\subsection{Probability Layer}
-A series of experiments on various kind of specialized datasets have shown the effectiveness of probability layer. CIFAR100 is a prevalent benchmark for various kind of CNN models, which has 100 classes, a training dataset with 500 images per class, and a testing dataset with 100 images per class. To mimic the runtime distribution, we generate a specialized dataset manually. For example, in generation of a specialized dataset with 80\% data skew and 10 domain classes, we would use 1000 images from the testing dataset according to these 10 domain classes, and randomly select 250 images from other classes. We trained the model on original CIFAR100 training dataset and test the model on various kind of specialized datasets with different number of domain classes and selection of domain classes. We also take into account that the selection of domain classes because the choice of labels have strong effect on the test accuracy, even if we keep the number of domain classes unchanged. Actually some classes are easier to classify than others. To eliminate this random effect, we will choose different groups of labels for each number of domain classes.
-
-Figure 
-%\ref{fig:ProbabilityLayer} 
-summarizes the results. As a benchmark, the test accuracy on the CIFAR100 testing dataset without probability layer is 73.74\%. If the number of domain classes is 2 and we choose the label 0 and 1, the accuracy without probability layer is 88.12\%. The difference between specialized testing accuracy 88.12\% and the overall accuracy 73.74\% is due to selection of classes. If we change the label pair from (0,1) to (3,5), the accuracy would also change from 88.12\% to 61.39\%. However, in both case, the accuracy with probability layer are 98.51\% and 99.01\%, which performs very well consistently. 
-
-Then we increase the number of domain classes from 2 to 5 and choose domain classes as 0 to 4 and 5 to 9 respectively. This time, the effectiveness of selection of domain classes appears again. If we set domain classes as 0 to 4, the accuracy without probability layer would be 66.33\%. If we set domain classes as 5 to 9, the accuracy would be 81.06\%. The accuracy with probability layer in these two cases would be 93.03\% and 97.01\% respectively. The benefit of probability layer are 26.70\% and 15.95\% respectively.
-
-When we increase the number of domain classes further to 10, the effectiveness of probability layer would still be dramatic. We choose 0 to 9, 10 to 19, 20 to 29 as domain classes. The accuracy without probability layer would be 75.35\%, 67.16\%, and 75.84\%. The accuracy with probability layer would be 94.21\%, 91.41\%, and 92.22\%. The benefits are 18.86\%, 24.26\%, and 16.38\%.
-
-To explore the interaction between probability layer and number of domain classes, we increase the number of domain classes gradually from 2 to 100. The benefit disappears gracefully. When number of domain classes is less than 20, the benefit are above 18\%. Even if we have 40 domain classes, the benefit is still around 10\%. When there are 60 classes, there are 5\% benefit. Since we do not need retrain, these benefit are almost free. We do not need extra memory or energy and we have not introduced any extra latency. The only thing that we need is the run time distribution, which could be collected easily through an in-memory record.
-
-
-
-
-Experiments show the significant of \textit{probability layer} over \textit{naive mask}. Figure \ref{fig:NaiveMask} shows the comparison between probability layer and naive mask under different configurations. The red dash line represents the original accuracy without probability layer and naive mask, which is 74.57\%. When the number of domain classes is 10 and the distribution skew is 50\%, the accuracy with probability layer is 75.28\%, while the accuracy with naive mask is only 47.49\%. Thus probability layer has a positive effect even if the distribution skew is only 50\%, while the naive mask has a strong negative effect in this context. As we increase distribution skew gradually, the accuracy with probability layer and naive mask keeps increasing. Only after the distribution skew becomes larger than 77.67\%, naive mask starts to show positive effect on accuracy while probability layer keeps showing positive effect in all settings. As distribution skew approaches 100\%, the effect of naive mask catches probability layer up, since the true labels start to only exist in domain classes. In short, probability layer is a generalization of naive mask and shows benefit over original model and naive mask consistently.
-
-\begin{figure}
-\includegraphics[scale=0.43]{figure_1-1.png}
-\caption{Comparison Between Probability Layer and Naive Mask}
-\label{fig:NaiveMask}
-\end{figure}
-
-
-\begin{figure}
-\includegraphics[scale=0.43]{savedEnergy.ps}
-\caption{Saved Energy}
-\label{fig:savedEnergy}
-\end{figure}
-
-
-\subsection{Energy efficiency}
-Considering class correlation can save more energy than only considering number of classes. Fig \ref{fig:savedEnergy} shows the energy saved by class correlation. We generate a subset from CIFAR100 with 2 classes and different class correlation. The accuracy of VGG16 on CIFAR100 is 70.48\%. We simplify VGG16 and reduce layers until the testing accuracy on specialized dataset is lower than 70\%. Considering the innegligible impact of class correlation on testing accuracy, the experiments are done by different class correlation and, for each class correlation, the classes are selected randomly and the experiments are repeated for twenty times to get an average accuracy. When the class number is two and class correlation is $1$, we need a model with one convolutional layer and two fully connected layer to get the accuracy as $72.9\%$. Thus we only need to consume $85\%$ computation to get the same accuracy as the VGG16 with $19$ layers. If we decrease the class correlation to $0.5$, we only need a single fully connected layer to achieve 74.6\% accuracy. In this case, only $5\%$ computation of VGG16 is consumed. Thus, as we decrease class correlation from $1$ to $0.5$, the energy consumption is decreased by $66\%$
+\subsection{General setup}
 
 
 
@@ -463,19 +432,25 @@ We implemented probability layer on DenseNet \cite{huang2017densely} and evaluat
 
 To show the potential of PCNN, we evaluate probability layer on specialized datasets composed of a various number of classes and class distributions. We begin our experiments by showing that different class combinations have significant influence over the accuracy and probability layer can bring in benefit and perform better than transfer learning on all class combinations. Then we show that probability layer can improve accuracy for any number of classes and make use of unbalanced distribution. We proceed to show that most of the images will have predicted probability higher than $75\%$, which are called \textit{high-confidence images}, and the accuracy among these high-confidence images is $84\%$. Finally, we demonstrate that probability layer is complementary to acceleration methods through combining probability layer with spatial redundancy elimination approach \cite{figurnov2016perforatedcnns} to achieve decreased computation and improved accuracy.
 
+\paragraph{Data sets.} We run our 
+\paragraph{Experiment environment.}
+\paragraph{Metrics.}
+
+
+
 \subsection{Class effect}
 We explore the effect of class combinations and compare the performance of probability layer and transfer learning on various class combinations. Fixing the number of classes as two, we randomly selected five class combinations and compare the original model, model after transfer learning, and the model with probability layer, see Figure \ref{fig:classEffectExamples}. We see that with the same model, different class combinations may have dramatically different accuracy. While the original model can achieve a accuracy as 83\% for classifying chair and cup, the accuracy for beaver and bear is only 52.5\%. We can also observe that both transfer learning and probability layer can bring in benefit no matter which two classes compose the dataset while probability layer generally performs better than transfer learning. In the randomly selected five class combinations, probability layer can provide an additional benefit of $2.16\%$ on average. Note that for fox and pine, transfer learning provides a slightly better accuracy than probability layer. We believe that this is due to randomness, especially when considering that transfer learning performs better on all other class combinations. 
 
 Figure \ref{fig:classEffectSummary} gives a summary of the performance of all three models on the specialized dataset with two and five classes. The figure shows the result from $100$ randomly selected class combinations. We see that, on the original model, while the average accuracy for classifying two classes is $70\%$, the minimum accuracy could be $45\%$ and the maximum accuracy can reach $83\%$, which shows that the accuracy of classifying two classes could change dramatically even using the same model. This observation also holds for transfer learning and probability layer. We can also note that the average accuracy of probability layer is much higher than transfer learning. 
 
 \begin{figure}[t]
-    \begin{subfigure}[b]{0.47\textwidth}
+    \begin{subfigure}[b]{0.235\textwidth}
         %\centering
         \includegraphics[width=\textwidth]{classEffectLine.png}
         \caption{Concrete examples}
         \label{fig:classEffectExamples}
     \end{subfigure}
-    \begin{subfigure}[b]{0.47\textwidth}
+    \begin{subfigure}[b]{0.235\textwidth}
         %\centering
         \includegraphics[width=\textwidth]{classEffect.png}
         \caption{Summary of class effect}
@@ -499,14 +474,14 @@ We also note that a large portion of images can get a high predicted probability
 
 \begin{figure}[!tbp]
   \centering
-  \begin{minipage}[b]{0.49\textwidth}
+  \begin{minipage}[b]{0.235\textwidth}
         \centering
         \includegraphics[width=\textwidth]{PLvsRetrain.png}
         \caption{Performance on different number of classes}
         \label{fig:PLvsRetrain}
   \end{minipage}
   \hfill
-  \begin{minipage}[b]{0.49\textwidth}
+  \begin{minipage}[b]{0.235\textwidth}
         \centering
         \includegraphics[width=\textwidth]{threshold.png}
         \caption{Threshold}
@@ -522,13 +497,13 @@ We evaluate the probability layer on the noisy environment, in which a few major
 
 \begin{figure}[t]
     \centering
-    \begin{subfigure}[b]{0.49\textwidth}
+    \begin{subfigure}[b]{0.235\textwidth}
         \centering
         \includegraphics[width=\textwidth]{variousPercentage5.png}
         \caption{Five classes with various distribution}
         \label{fig:variousDistribution5}
     \end{subfigure}
-    \begin{subfigure}[b]{0.49\textwidth}
+    \begin{subfigure}[b]{0.235\textwidth}
         \centering
         \includegraphics[width=\textwidth]{variousPercentage10.png}
         \caption{Ten classes with various distribution}
@@ -565,32 +540,6 @@ We first apply the probability layer to the network. Then we apply the spatial r
      Combined Method & 2.0x & 92.20\%
     \end{tabular}
 \end{table}
-
-\begin{figure*}
-\centering
-\begin{subfigure}{.5\textwidth}
-  \centering
-  \includegraphics[scale=0.4]{profiler1.ps}
-  \caption{Four classes overlapping}
-  \label{fig:distributionDistance1}
-\end{subfigure}%
-\begin{subfigure}{.5\textwidth}
-  \centering
-  \includegraphics[scale=0.4]{profiler2.ps}
-  \caption{Two classes overlapping}
-  \label{fig:distributionDistance2}
-\end{subfigure}
-
-\caption{Graphs showing the distance between data distribution of two classes groups}
-\label{fig:distributionDistance}
-\end{figure*}
-\subsection{Detection overhead}
-The fundamental of using runtime distribution is detecting runtime distribution, mainly focused on the number of classes and what classes are appearing. Profiler is the component in \textit{SECS} taking care of this detection. As images come, full models will classify these images and profiler will store the results. For every $120$ processed images, the profiler will calculate the distribution of these classified images and compare with the distribution for last $120$ images. We choose $120$ because generally we will process $1$ image per seconds and $120$ images will represent the distribution of classes in two minutes. Assuming there are $n$ classes in the full model, the frequency of each class will be recorded as $f_i$, which is the proportion that this class appears. The profiler will calculate the difference between two distributions by 
-\begin{equation}
-    distance = \sum_{i = 1}^{n}(f_i^1 - f_i^2)
-\end{equation}
-, where $f_i^1$ is the frequency of class $i$ in the first distribution and $f_i^2$ is the frequency of class $i$ in the second distribution. If the distance is less than $0.5$, we will claim that distribution has been stabilized and a runtime distribution has been detected. Fig \ref{fig:distributionDistance} shows profiler performance. In fig \ref{fig:distributionDistance1}, the blue histogram is the distribution of distance when all images are selected from class $0$ to $4$ and the green histogram is the distribution of distance when images comes from classes $0$ to $4$ and $1$ to $5$ alternately. If the distance between two distribution is less than $0.4$, we can assert that classes in these two consecutive time period are same. In fig \ref{fig:distributionDistance2}, the meaning of blue and green histogram are same as in fig \ref{fig:distributionDistance1}. The only difference is that the groups of classes in fig \ref{fig:distributionDistance2} is $0$ to $4$ and $3$ to $7$, where class groups have less overlap than fig \ref{fig:distributionDistance1}. In this case, the distance between two histograms larger. As we decrease the overlap further, the distance between two histograms will become larger. Thus the choice of $0.4$ as detection criterion works. Based on these experiments, four minutes or $240$ images would be enough for detecting runtime class distribution.
-
 
 
 \newpage
