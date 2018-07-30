@@ -64,7 +64,7 @@ Modern convolutional neural networks (CNNs) has made unprecedented advance in vi
 To enable the deployment of CNNs on mobile platforms, an increasing research focus has been received by accelerating CNNs, basically trading accuracy for less resource consumption. One approach is to prune the model by reducing the spatial redundancy inside the architecture. LCNN \cite{bagherinezhad2017lcnn} utilizes network quantization to achieve a $5$x speedup at a loss of $7.1$\% accuracy for the ResNet-18 model \cite{he2016deep}. On VGG-16 \cite{simonyan2014very}, filter pruning \cite{lin2018accelerating} is used to reduce computation by $4$x while the accuracy is also decreased by $2.81$\%. Another approach is to build a model store and dynamically select the most accurate model under available resource budget during runtime. JouleGuard \cite{hoffmann2015jouleguard} utilize control theory to build a scheduling model and save $3$x with a decrease in accuracy of $4$\%. While the resource consumption is reduced, these pruning methods and scheduling models also introduce a decrease in accuracy, which is not desired.
 
 
-To both reduce resource consumption and increase accuracy, we identify an environment information that has not been studied thoroughly, called \textit{runtime class skew}. Runtime class skew refers to the phenomenon that in an environment, i.e. a specific location or time period, only a few classes may appear while others seldomly appear or do not show up at all. For example, only a few people may appear in our lab, even if we may meet thousands of people through the whole year. While a complex model with thousands of classes is required to classify thousands of peoples, a small model with less than $10$ classes can be sufficient in the lab. Less number of classes indicates a higher accuracy and less resource consumption. For example, if we randomly guess from $1000$ classes, the accuracy is $0.1\%$, while the accuracy would increase to $10\%$ for randomly guessing from $10$ classes. Considering the main constraint of pruning methods is the decrease in accuracy, this increase in accuracy provides more space on optimizing the architecture. Thus more resource consumption can be reduced.
+To both reduce resource consumption and increase accuracy, we identify an environment information that has not been studied thoroughly, called \textit{Class skew}. Class skew refers to the phenomenon that in an environment, i.e. a specific location or time period, only a few classes may appear while others seldomly appear or do not show up at all. For example, only a few people may appear in our lab, even if we may meet thousands of people through the whole year. While a complex model with thousands of classes is required to classify thousands of peoples, a small model with less than $10$ classes can be sufficient in the lab. Less number of classes indicates a higher accuracy and less resource consumption. For example, if we randomly guess from $1000$ classes, the accuracy is $0.1\%$, while the accuracy would increase to $10\%$ for randomly guessing from $10$ classes. Considering the main constraint of pruning methods is the decrease in accuracy, this increase in accuracy provides more space on optimizing the architecture. Thus more resource consumption can be reduced.
 
 The challenge is how to utilize class skew efficiently, especially considering that class skew may switch frequently as time goes, i.e., every 10 minutes. It is infeasible to pre-train a sequence of models for each class skew, since there is a mind-bogglingly huge number of class skews. For example, if we take $10$ out of $100$ classes, there would be $1.73 \ast 10^{14}$ combinations of class skew. Existing works \cite{han2016mcdnn, shen2016fast} choose to finetune the model towards the class skew during runtime when class skew switches, based on the technique from transfer learning  \cite{doersch2015unsupervised, noroozi2016unsupervised, oquab2014learning, yosinski2014transferable}. With transfer learning, the number of nodes in the last layer will be reduced according to class skew and last few layers will be finetuned by several epochs, which introduce lots of computation overhead and latency. A 14-second or even minutes latency \cite{shen2016fast} will occur every time the class skew switches and the model is adapted. To efficiently adapt the model during runtime towards the class skew, we bring up \textit{probability layer}, an easily-implemented and highly flexible add-on module to existing methods, which introduces no overhead and produces an equivalent or better accuracy than finetuning.
 
@@ -86,13 +86,13 @@ Class-specific pruning is challenging because retraining the whole model is requ
 
 %Instead, we observe that CNNs often have strong redundancy inside its structure, i.e., within feature maps, across channels, and across layers. Inspired by the loop perforation technique from source code optimization \cite{figurnov2016perforatedcnns}, we can speed up computation by skipping their evaluation in some of the positions. We further observe that different positions has different redundancy and we can select the hyper-parameter according to their influence over final accuracy. Based on these insight, we propose a framework, called \textit{perforation}, for selecting hyper-parameters in three levels; i.e., neuron-wise, channel-wise, and layer-wise, without any finetune for the new architecture and agnostic to the model architecture. While carefully hand-crafted architecture, SqueezeNet, achieves AlexNet-level accuracy with $50$x less parameters, perforation can reach $600$x reduction in parameters while also achieve AlexNet-level accuracy. Perforation is orthogonal to matrix factorization, matrix pruning, quantization, and group convolution, and can be combined with all for further optimization. When combined with runtime class skew, perforation can prune the model according to which classes appear in current environment and only maintain the important path for appearing classes.
 
-In this paper, we present \textbf{SECS}, an efficient deep stream processing service. SECS efficiently detects and utilizes runtime class skew and prunes the candidate model according to the environment and the resource budget, as detailed in section \ref{SECS}. We carefully design a profiler to detect the runtime class skew. Once the class skew is detected, the profiler will further decide whether the class skew is a hot class skew or a cold one. For cold class skews, probability layer is utilized to efficiently adapt the model towards the class skew during runtime with no overhead. If the class skew is marked a hot one, the profiler will aggressively optimize the model with class-specific pruning after the resource constraint is resolved. The adapted models will be stored in model bank and during runtime a scheduling model based on control theory will dynamically select the Pareto-optimal models under the available resource budget. Extensive evaluation shows that our system can potentially reduce the computation by xx times and memory consumption by xx times.
+In this paper, we present \textbf{SECS}, an efficient deep stream processing service. SECS efficiently detects and utilizes runtime class skew and prunes the candidate model according to the environment and the resource budget, as detailed in section \ref{SECS}. We carefully design a profiler to detect the class skew. Once the class skew is detected, the profiler will further decide whether the class skew is a hot class skew or a cold one. For cold class skews, probability layer is utilized to efficiently adapt the model towards the class skew during runtime with no overhead. If the class skew is marked a hot one, the profiler will aggressively optimize the model with class-specific pruning after the resource constraint is resolved. The adapted models will be stored in model bank and during runtime a scheduling model based on control theory will dynamically select the Pareto-optimal models under the available resource budget. Extensive evaluation shows that our system can potentially reduce the computation by xx times and memory consumption by xx times.
 
 In summary, we make the following contributions:
 
 \begin{enumerate}
-  \item We identify an widely-existing environment information, runtime class skew, which can both decrease resource consumption and increase accuracy.
-  \item We bring up \textit{probability layer} to efficiently adapting all models to the runtime class skew without any overhead and achieving an equal or better accuracy than finetuneing.
+  \item We identify an widely-existing environment information, class skew, which can both decrease resource consumption and increase accuracy.
+  \item We bring up \textit{probability layer} to efficiently adapting all models to the class skew without any overhead and achieving an equal or better accuracy than finetuneing.
   \item We identify class skew dichotomy and bring up two modes, interpreation and compilation, to adapt the model with no overhead for cold class skews and prune aggressively for hot class skews to gain long-term benefit.
   \item We identify that some class groups are easier to classify while distinguishing some other class groups are harder and bring up \textit{class-specific pruning} to automatically select hyper-parameters according to the targetting classes without any finetuning during the selection process.
   \item We build a system, \textit{SECS} for efficient deep stream processing service. Extensive evaluation confirms its benefit is significant.
@@ -109,30 +109,29 @@ As an example of cognitive assistance applications, smart glasses, Aira \cite{ar
 
 On the other hand, robotic visions are expected to recognize objects automatically and work in the wild for days. For example, remote-controlled robotic animals are used by BBC \cite{bbc2018} to search specific animals and document secret lives of animals in the wild. Teleoperated robots \cite{landmine2018} are used for detecting and removing landmine in various environment. SpotMini \cite{spot-mini} are expected to handle objects, climbs stairs, and will operate in offices, home, and outdoors.
 
-\paragraph{Common themes.} While mobile platforms are resource-limited, these platforms are still expected to deploy CNNs which consumes both energy and memory intensively, since CNNs has a much better performance of CNNs than traditional approaches. While existing approaches of solving this tension generally trade accuracy for saving resource, runtime class skew is an environment information that can both increase accuracy and decrease resource consumption. Further, runtime class skew widely existes in the wild and is freely available. 
+\paragraph{Common themes.} While these mobile platforms are resource-limited and latency-sensitive, CNN models with high resource consumption are still expected to be deployed on them, since CNNs has a much better performance than traditional approaches. The problem of tension is well- known, and existing methods of solving this problem generally trade accuracy for resource and speed. Now we want to make use of class skew to improve CNN models with both accuracy increasing and resource consumption decreasing. We will discuss about the features of class skew and how to utilize it efficiently in details next.
 
+\subsection{Features of input and Opportunities}
+The above applications all take input from the life-style environment. Such input exhibits class skew, since the activities of mobile devices show strong spatial and temporal locality. 
 
-\subsection{Opportunities}
-The above applications all take input from the life-style environment. Such input exhibits runtime class skew, since the activities of mobile devices show strong spatial and temporal locality. 
+\paragraph{Temporal locality.} We can view the input stream as a continual camera feed. In the input stream, every frame differs only slightly from previous frames. Thus, the objects in frames usually keep appearing for a time period before the user moves to another scene. For example, a small group of people will appear frequently in a scenario of films, generally lasting for tens of minutes, and another group of people will not appear until the scenario has changed. The class skew appears frequently and provides chance to simplify CNN models. 
 
-\paragraph{Temporal locality.} We can view the input stream as a continual camera feed. In the input stream, every frame differs only slightly from previous frames. Thus, the objects in frames usually keep appearing for a time period before the user moves to another scene. For example, a small group of people will appear frequently in a scenario of films, generally lasting for tens of minutes, and another group of people will not appear until the scenario has changed. The runtime class skew appears frequently and provides chance to simplify CNN models. 
-
-\paragraph{Spatial locality} It is common for humans to follow along recurrent trajectories, for example, due to their regular social activities or frequenting a favorite park from time to time. Therefore, there is some level of recurrence of the scenes obtained as part of those activities. Through these repeating scenarios, same runtime class skew will also keep appearing, which make it a feasible choice to optimize CNNs towards the runtime class skew.
+\paragraph{Spatial locality} It is common for humans to follow along recurrent trajectories, for example, due to their regular social activities or frequenting a favorite park from time to time. Therefore, there is some level of recurrence of the scenes obtained as part of those activities. Through these repeating scenarios, same class skew will also keep appearing, which make it a feasible choice to optimize CNNs towards the class skew.
 
 The existence of strong temporal and spatial locality indicates the existence of class skew. Experiments on videos of day-to-day life from Youtube \cite{shen2016fast} shows that $10$ objects comprised $90$\% of all objects in $85$\% time. Utilizing class skew will both increase accuracy and decrease resource consumption, as detailed in section \ref{evaluation}. 
 
-We further observe the existance of class skew dichotomy, which means that some class skews appears in the future, called hot class skew, while other class skews never appear again or appear seldom, called cold class skew. Inspired by techniques from source code, this dichotomy motivates us to implement two different levels of optimization with different overhead on hot and class skew, called the compilation and interpretation. Specifically, class-specific pruning can be conducted on hot class skews to achieve extra benefit.
+We further observe the existence of class skew dichotomy, which means that some class skews appears in the future, called hot class skew, while other class skews never appear again or appear seldom, called cold class skew. Inspired by techniques from source code, this dichotomy motivates us to implement two different levels of optimization with different overhead on hot and class skew, called the compilation and interpretation. Specifically, class-specific pruning can be conducted on hot class skews to achieve extra benefit.
 
 
 \subsection{Challenges}
-The challenge remains in two respective; i.e. how to utilize runtime class skew efficiently and how to conduct class-specific pruning with low overhead. 
+In order to utilize class skew more efficiently, we need to deal with class skew switch and explore how to conduct class-specific pruning with low overhead. 
 
-Utilizing runtime class skew is challenging because the runtime class skew switches frequently as time goes, i.e., every $10$ minutes. It is infeasible to pre-train a model for every class skew during the deployment time, due to the mind-bogglingly huge number of class combinations. In existing works \cite{\cite{han2016mcdnn, shen2016fast}}, a general model handling all possible classes will be trained at the deployment and once the class skew is detected during runtime, the model will be adapted correspondingly. Specifically, the number of nodes in the softmax layer will be reduced and the last few layers will be finetuned during runtime towards the class skew under the direction of transfer learning \cite{doersch2015unsupervised, noroozi2016unsupervised, oquab2014learning, yosinski2014transferable}, which consumes energy and memory intensively. 
+It is obvious that class skew switches frequently as time goes, i.e., every $10$ minutes. Dealing with this phenomenon is hard because it is infeasible to pre-train a model for every class skew during the deployment time, due to the mind-bogglingly huge number of class combinations. In existing works \cite{\cite{han2016mcdnn, shen2016fast}}, a general model handling all possible classes will be trained at the deployment and once the class skew is detected during runtime, the model will be adapted correspondingly. Specifically, the number of nodes in the softmax layer will be reduced and the last few layers will be finetuned during runtime towards the class skew under the direction of transfer learning \cite{doersch2015unsupervised, noroozi2016unsupervised, oquab2014learning, yosinski2014transferable}, which consumes energy and memory intensively. 
 
-The challeng of class-specific pruning resides in the obstacle of comparing the performance of various hyper-parameters. Class-specific pruning requires to select the simplest model with least layers, channels, and neurons for a given group of classes. During this process, the relative importance of different layers, channels, and neurons on accuracy needs to be compared and the parameters with least influence should be removed. However, to get the exact performance, training the new model cannot be avoided while it is unaffordable to do so for each new architecture. Existing papers hand-select architectures, which is not automatical and only test a small space of hyperparameters, i.e. $2$ or $4$ convolutional layers, $32$ or $64$ neurons in each layer, as detailed in section \ref{relatedWork}.
+The challenge of class-specific pruning resides in the obstacle of comparing the performance of various hyper-parameters. Class-specific pruning requires to select the simplest model with least layers, channels, and neurons for a given group of classes. During this process, the relative importance of different layers, channels, and neurons on accuracy needs to be compared and the parameters with least influence should be removed. However, to get the exact performance, training the new model cannot be avoided while it is unaffordable to do so for each new architecture. Existing papers hand-select architectures, which is not automatical and only test a small space of hyperparameters, i.e. $2$ or $4$ convolutional layers, $32$ or $64$ neurons in each layer, as detailed in section \ref{relatedWork}.
 
 
-We address these challenges by probability layer, an efficient model adaption algorithm, and perforation, an automatic class-specific pruning methods with no finetuning during the process of selection hyper-parameters. Further, we designed a real-time image classification framework, SECS, to automatically detect and utilize runtime class skew, as well as select the Pareto-optimal models under available resource budget.
+We address these challenges by probability layer, an efficient model adaption algorithm, and perforation, an automatic class-specific pruning methods with no finetuning during the process of selection hyper-parameters. Further, we designed a real-time image classification framework, SECS, to automatically detect and utilize class skew, as well as select the Pareto-optimal models under available resource budget.
 
 
 
@@ -166,7 +165,7 @@ We address these challenges by probability layer, an efficient model adaption al
 \label{fig:Architecture}
 \end{figure}
 
-SECS is a real-time deep stream processing system utilizing runtime class skew efficiently and conducting class specific pruning automatically, as detailed in Figure \ref{fig:Architecture}. The \texttt{AppListener} maintains a threadpool, summarizes the requests from upper-level applications into a stream, and forwards the stream into \texttt{profiler} for further procedure. During runtime, the \texttt{profiler} maintains current class distribution and effectively detect class skew. Once class skew is detected, the \texttt{profiler} will either call existing adapted model from \texttt{model bank}, or require the \texttt{probability layer} to efficiently adapt the model. The classification results will be feed back to \texttt{profiler} which will both respond the \texttt{AppListener} and update runtime class skew. During cold time, the \texttt{profiler} will check whether a class skew has appeared more frequently than a pre-defined threshold, and call \texttt{perforation} to generate class-specific pruned models for more optimized classification in the future. We discuss the individual steps next.
+SECS is a real-time deep stream processing system utilizing class skew efficiently and conducting class specific pruning automatically, as detailed in Figure \ref{fig:Architecture}. The \texttt{AppListener} maintains a threadpool, summarizes the requests from upper-level applications into a stream, and forwards the stream into \texttt{profiler} for further procedure. During runtime, the \texttt{profiler} maintains current class distribution and effectively detect class skew. Once class skew is detected, the \texttt{profiler} will either call existing adapted model from \texttt{model bank}, or require the \texttt{probability layer} to efficiently adapt the model. The classification results will be feed back to \texttt{profiler} which will both respond the \texttt{AppListener} and update class skew. During cold time, the \texttt{profiler} will check whether a class skew has appeared more frequently than a pre-defined threshold, and call \texttt{perforation} to generate class-specific pruned models for more optimized classification in the future. We discuss the individual steps next.
 
 
 
@@ -187,10 +186,10 @@ where $\mathcal{W}_l \in \mathbb{R}^{C_l \: \times \:   d \: \times \: d \: \tim
 
 
 \subsection{Probability Layer}
-In this section, we introduce the probability layer, which can adapt the general model towards the runtime class skew without any overhead.
+In this section, we introduce the probability layer, which can adapt the general model towards the class skew without any overhead.
 
 \paragraph{Key Assumption.} 
-The main difference between the proposed layer and the original CNNs is that we take into consideration the environment information. In original CNNs, the prediction for each image will be made individually, assuming a sequence of images is independent and identically distributed (\textit{i.i.d}). However, in real life, this assumption does not hold and strong temporal and spatial locality may exist. Instead, we assumes runtime class skew exists, which means the number of classes and class types are fixed during a time period. While we assume that a class skew may exist for a time period, it is still possible that the class skew switches to another class skew after a few minutes, which can be detected and handled by the profiler, as detailed in section \ref{profilerSection}. Further, we assume the existence of a model classifying all possible classes, called the \textit{general model}. This assumption is reasonable because modern CNNs can be trained to classify thousands of classes \cite{krizhevsky2012imagenet, simonyan2014very, szegedy2015going, he2016deep, huang2017densely} and human faces \cite{parkhi2015deep, schroff2015facenet, taigman2015web}.
+The main difference between the proposed layer and the original CNNs is that we take into consideration the environment information. In original CNNs, the prediction for each image will be made individually, assuming a sequence of images is independent and identically distributed (\textit{i.i.d}). However, in real life, this assumption does not hold and strong temporal and spatial locality may exist. Instead, we assumes class skew exists, which means the number of classes and class types are fixed during a time period. While we assume that a class skew may exist for a time period, it is still possible that the class skew switches to another class skew after a few minutes, which can be detected and handled by the profiler, as detailed in section \ref{profilerSection}. Further, we assume the existence of a model classifying all possible classes, called the \textit{general model}. This assumption is reasonable because modern CNNs can be trained to classify thousands of classes \cite{krizhevsky2012imagenet, simonyan2014very, szegedy2015going, he2016deep, huang2017densely} and human faces \cite{parkhi2015deep, schroff2015facenet, taigman2015web}.
 
 \paragraph{Intuition.}
 Probability layer helps by using environment information that original CNNs does not use. When human recognizes an object, both vision and environment information will be used, i.e., what we have seen recently and which objects may appear here. However, CNNs can only make use of visual information while discarding environment information, which makes it extremely difficult to distinguish classes with similar appearance. For example, Figure \ref{fig:sub2} and Figure \ref{fig:sub3} shows images for bottle and rocket respectively. It is hard to distinguish these two classes only from images while environment information can easily rule out rocket in most scenarios. 
@@ -331,7 +330,7 @@ Also note that in MobileNet \cite{howard2017mobilenets}, reducing resolution is 
 
 
 \subsection{Profiler} \label{profilerSection}
-Profiler detects runtime class skew and makes a series of decisions on whether or not a class skew exists, which model to run, and whether a class-specific pruning is necessary or not. We phrase the runtime class skew detection problem as a oracle Bandit problem \cite{auer2002finite, lai1985asymptotically} and utilize WEG algorithm \cite{shen2016fast} to solve it efficiently.
+Profiler detects class skew and makes a series of decisions on whether or not a class skew exists, which model to run, and whether a class-specific pruning is necessary or not. We phrase the class skew detection problem as a oracle Bandit problem \cite{auer2002finite, lai1985asymptotically} and utilize WEG algorithm \cite{shen2016fast} to solve it efficiently.
 
 Let denote a stream of images to be classified as $x_1, \: x_2, \: ...,\: x_i, \: ... \in X = \mathbb{R}^n$ and the corresponding true labels as $y_1, \:y_2, \:...,\:y_i, \:... \in Y = [1, ..., k]$. Assume a partition $\pi: I^+ \rightarrow I^+$ over the stream exists, where each partition maintains a distribution $T_{\pi(i})$ and the image $(x_i, y_i)$ is drawn randomly from distribution $T_{\pi(i)}$. Here, the overall series is an abruptly-changing and piece-wise stationary distribution. At test time, neither true labels $y_i$ nor partition $\pi$ is known. Also we do not have any assumptions on how long a stationary distribution exist. The task of profiler is to detect the stationary distribution when it appears and switch to another stationary distribution when it switches.
 
@@ -430,16 +429,8 @@ We implemented probability layer on DenseNet \cite{huang2017densely} and evaluat
 
 \textbf{Transfer Learning.} Following the published practice \cite{doersch2015unsupervised, han2016mcdnn, oquab2014learning, shen2016fast, yosinski2014transferable}, all fully-connected layers after convolutional layers are finetuned on the generated dataset with same class distribution as the testing dataset. To eliminate the effect of the epoch, we used three different epochs, i.e., $1$, $5$, and $30$. The maximum epoch is $30$ because latency and energy efficiency are considered.
 
-To show the potential of PCNN, we evaluate probability layer on specialized datasets composed of a various number of classes and class distributions. We begin our experiments by showing that different class combinations have significant influence over the accuracy and probability layer can bring in benefit and perform better than transfer learning on all class combinations. Then we show that probability layer can improve accuracy for any number of classes and make use of unbalanced distribution. We proceed to show that most of the images will have predicted probability higher than $75\%$, which are called \textit{high-confidence images}, and the accuracy among these high-confidence images is $84\%$. Finally, we demonstrate that probability layer is complementary to acceleration methods through combining probability layer with spatial redundancy elimination approach \cite{figurnov2016perforatedcnns} to achieve decreased computation and improved accuracy.
-
-\paragraph{Data sets.} We run our 
-\paragraph{Experiment environment.}
-\paragraph{Metrics.}
-
-
-
 \subsection{Class effect}
-We explore the effect of class combinations and compare the performance of probability layer and transfer learning on various class combinations. Fixing the number of classes as two, we randomly selected five class combinations and compare the original model, model after transfer learning, and the model with probability layer, see Figure \ref{fig:classEffectExamples}. We see that with the same model, different class combinations may have dramatically different accuracy. While the original model can achieve a accuracy as 83\% for classifying chair and cup, the accuracy for beaver and bear is only 52.5\%. We can also observe that both transfer learning and probability layer can bring in benefit no matter which two classes compose the dataset while probability layer generally performs better than transfer learning. In the randomly selected five class combinations, probability layer can provide an additional benefit of $2.16\%$ on average. Note that for fox and pine, transfer learning provides a slightly better accuracy than probability layer. We believe that this is due to randomness, especially when considering that transfer learning performs better on all other class combinations. 
+We explore the effect of class combinations and compare the performance of probability layer and transfer learning on various class combinations. Fixing the number of classes as two, we randomly selected five class combinations and compare the original model, model after transfer learning, and the model with probability layer, see Figure \ref{fig:classEffectExamples}. We see that with the same model, different class combinations may have dramatically different accuracy. While the original model can achieve a accuracy as 83\% for classifying chair and cup, the accuracy for beaver and bear is only 52.5\%. We can also observe that both transfer learning and probability layer can bring in benefit no matter which two classes compose the dataset while probability layer generally performs better than transfer learning. In the randomly selected five class combinations, probability layer can provide an additional benefit of $2.16\%$ on average.
 
 Figure \ref{fig:classEffectSummary} gives a summary of the performance of all three models on the specialized dataset with two and five classes. The figure shows the result from $100$ randomly selected class combinations. We see that, on the original model, while the average accuracy for classifying two classes is $70\%$, the minimum accuracy could be $45\%$ and the maximum accuracy can reach $83\%$, which shows that the accuracy of classifying two classes could change dramatically even using the same model. This observation also holds for transfer learning and probability layer. We can also note that the average accuracy of probability layer is much higher than transfer learning. 
 
@@ -467,7 +458,7 @@ We compare our results with transfer learning in Figure \ref{fig:PLvsRetrain}. F
 
 
 \subsection{High confidence, high accuracy}
-We justify our design of threshold in probability layer by exhibiting the percentage of images with predicted probability layer higher than the various threshold and the accuracy of these images, see Figure \ref{fig:threshold}. While the original DenseNet has top-1 accuracy as $73\%$, the accuracy increase to $83\%$ when we set the threshold $\omega$ to be $75\%$. When we increase furtherly the threshold $\omega$ to be $99\%$, the accuracy would increase to $95.01\%$. Thus when a model has strong confidence in its prediction, we should better believe in the model instead of rescaling. 
+We justify our design of threshold in probability layer (euqation \ref{eq: recover}) by exhibiting the percentage of images with predicted probability layer higher than the various threshold and the accuracy of these images, see Figure \ref{fig:threshold}. While the original DenseNet has top-1 accuracy as $73\%$, the accuracy increase to $83\%$ when we set the threshold $\omega$ to be $75\%$. When we increase furtherly the threshold $\omega$ to be $99\%$, the accuracy would increase to $95.01\%$. Thus when a model has strong confidence in its prediction, we should better believe in the model instead of rescaling. 
 
 We also note that a large portion of images can get a high predicted probability from the original model. For instance, there are more than 60\% images get predicted probability higher than 95\%. For these images that the original model has strong confidence in its prediction, the probability layer will not interfere with the decision. The probability layer will step in when the original model is not sure and give suggestion to the probability layer according to the environment information. 
 
@@ -489,13 +480,7 @@ We also note that a large portion of images can get a high predicted probability
   \end{minipage}
 \end{figure}
 
-
-
-\subsection{Results on specialized datasets with both majority and minority classes}
-We evaluate the probability layer on the noisy environment, in which a few major classes occupies most of the images while a huge number of minority classes also appear. Figure \ref{fig:variousDistribution5} and Figure \ref{fig:variousDistribution10} shows the results when the numbers of majority classes are five and ten respectively. While the weight of majority classes increases from $50$\% to $100$\%, probability layer performs consistently better than the transfer learning for $5$ or $1$ rounds. Even if we finetune the model for $30$ rounds, probability layer still performs better when the weight of major classes is relatively small. When the weights increase further, the advantage of finetuning for $30$ rounds is at most $0.5$\%. Considering the intensive energy-consumption and time latency of retraining for $30$ rounds, this benefit of $0.5$\% advantage is not so significant, especially on devices which require the real-time response and has strict energy budget. We should also note that retraining for $1$ rounds would make the accuracy to be much lower than original model when the weight of major classes is less than 75\%. Since we need to choose a method before we start in automatically using environment information, we can conclude that probability layer is the most suitable method.
-
-
-\begin{figure}[t]
+\begin{figure}
     \centering
     \begin{subfigure}[b]{0.235\textwidth}
         \centering
@@ -514,32 +499,96 @@ We evaluate the probability layer on the noisy environment, in which a few major
 \end{figure}
 
 
-\subsection{Combining acceleration methods}
-A promising way to achieve high speed up and accuracy is to combine acceleration methods with probability layer. For this to succeed, the acceleration methods should utilize different types of redundancy in the network. In this section, we verify that probability layer can be combined with an acceleration method of using spatial redundancy, \textit{PerforatedCNN} \cite{figurnov2016perforatedcnns}, to achieve high speed up while increasing top-1 accuracy.
 
-We reimplemented the PerforatedCNN \cite{figurnov2016perforatedcnns} on DenseNet. PerforatedCNN makes use of spatial redundancy in the image by skipping evaluation in some of the spatial positions. Different from other methods in using spatial redundancy, i.e., increasing strides, PerforatedCNN will interpolate these skipped positions using nearest neighborhood, such that the output size will be unchanged. In this way, the architecture remains same and no finetuning is needed. The shortage of PerforatedCNN is that it may introduce a huge decrease in accuracy. Our experiments show that this drawback of PerforatedCNN could be made up by probability layer. Thus combining probability layer with other acceleration methods can both decrease computation and increase accuracy.
 
-We first apply the probability layer to the network. Then we apply the spatial redundancy elimination methods to this network. In the whole process, no finetuning is needed. The PerforatedCNN is tested at the theoretical speedup level of 2x. The testing dataset contains $5$ randomly selected classes with equal frequency. The results are presented in the table \ref{tab:my_label}. Due to class effect, the original model will give a top-1 accuracy of $67.9\%$, which is slightly lower than the average accuracy of DenseNet on CIFAR100. With the probability layer, the model without finetuning can increase the top-1 accuracy dramatically to be $98.4\%$. The PerforatedCNN will give a top-1 accuracy of $48.19\%$ if we choose the theoretical speedup level of 2x, which is similar to the results reported in PerforatedCNN \cite{figurnov2016perforatedcnns}. Adding the proposed method, the PerforatedCNN can give a top-1 accuracy of $92.20\%$ while decreasing computation by half, which shows that probability layer complements spatial redundancy elimination methods perfectly and provides a promising perspective of combining probability layer with other acceleration methods.
-
-%Considering that the accuracy of previously published acceleration methods always decrease the accuracy, this combined method shows great potential and 
+\subsection{Results on specialized datasets with both majority and minority classes}
+We evaluate the probability layer on the noisy environment, in which a few major classes occupies most of the images while a huge number of minority classes also appear. Figure \ref{fig:variousDistribution5} and Figure \ref{fig:variousDistribution10} shows the results when the numbers of majority classes are five and ten respectively. While the weight of majority classes increases from $50$\% to $100$\%, probability layer performs consistently better than the transfer learning for $5$ or $1$ epochs. Even if we finetune the model for $30$ rounds, probability layer still performs better when the weight of major classes is relatively small. When the weights increase further, the advantage of finetuning for $30$ rounds is at most $0.5$\%. Considering the intensive energy-consumption and time latency of retraining for $30$ rounds, this benefit of $0.5$\% advantage is not so significant, especially on devices which require the real-time response and has strict energy budget. We should also note that retraining for $1$ rounds would make the accuracy to be much lower than original model when the weight of major classes is less than 75\%. This phenonmenon cannot be contributed to the selection of hyper-parameters, i.e., learning rate and initialization methods, since virous learning rate has been tested manually and no significant difference is found. Since we need to choose a method before we start in automatically using environment information, we can conclude that probability layer is the most suitable method.
 
 
 
-\begin{table}[h]
-    \caption{Summary}
-    \label{tab:my_label}
+
+\begin{table}
+    \caption{Perforation as a general pruning methods}
+    \label{tab:generalPrune}
 
     \centering
-    \begin{tabular}{ ccc } 
-     Method & Mult. $\downarrow$ & Top-1 Accuracy \\ 
+    \begin{tabular}{ c|c|cc } 
      \hline
-     Original Model & 1.0x & 67.79\% \\
-     Probability Layer & 1.0x & 98.4\% \\ 
-     Perforation & 2.0x & 48.19\% \\ 
+     Network & Acc. (\%) & Parameters & Computation \\ 
      \hline
-     Combined Method & 2.0x & 92.20\%
+     A & B & C & D \\
+     A & B & C & D \\
+     A & B & C & D \\
+     A & B & C & D \\
+     \hline
     \end{tabular}
 \end{table}
+
+\begin{table}
+    \caption{Class-specific pruning}
+    \label{tab:csPruning}
+
+    \centering
+    \begin{tabular}{ c|c|cc } 
+     \hline
+     Network & Acc. (\%) & Parameters & Computation \\ 
+     \hline
+     2 classes A & 70 & $P_A$ & $C_A$ \\
+     2 classes B & B & $P_A$ & $P_B$ \\
+     2 classes B & 70 & $P_B$ & $C_B$ \\
+     \hline
+     5 classes A & 70 & $P_A$ & $C_A$ \\
+     5 classes B & B & $P_A$ & $P_B$ \\
+     5 classes B & 70 & $P_B$ & $C_B$ \\
+     \hline
+     Original Model & 73.75\% & P & C \\
+     \hline
+    \end{tabular}
+\end{table}
+
+
+
+
+
+\begin{table}
+    \centering
+    \begin{tabular}{c|cc|cc}
+    \hline
+    \multirow{2}{*}{Segments} & \multicolumn{2}{c|}{disabled} &  \multicolumn{2}{c}{enabled}\\
+        & acc(\%) & lat(ms)  & acc(\%) & lat(ms)    \\
+    \hline
+    (random)      & A & L & A & L \\
+    \hline
+    (n=5, p=.9)      & \multirow{2}{*}{A} & \multirow{2}{*}{L} & \multirow{2}{*}{A} & \multirow{2}{*}{L} \\
+    +(random) & & & & \\
+    \hline
+    (n=15, p=.9)      & \multirow{2}{*}{A} & \multirow{2}{*}{L} & \multirow{2}{*}{A} & \multirow{2}{*}{L} \\
+    +(n=10,p=.8) & & & & \\
+    \hline
+    (n=10, p=.9)      & \multirow{3}{*}{A} & \multirow{3}{*}{L} & \multirow{3}{*}{A} & \multirow{3}{*}{L} \\
+    +(n=20,p=.8) & & & & \\
+    +(n=30,p=.7) & & & & \\
+    
+    \hline
+    
+    
+    \end{tabular}
+    \caption{Results on synthesized datasets}
+    \label{tab:synthe}
+\end{table}
+
+
+
+
+\subsection{Perforation}
+Table \ref{tab:generalPrune} shows the effect of perforation as a general pruning methods.
+
+Table \ref{tab:csPruning} shows the effect of perforation on class-specific pruning.
+
+\subsection{Overall: Synthetic experiments}
+
+
+\subsection{Overall: Video experiments}
 
 
 \newpage
@@ -566,9 +615,11 @@ Various model compression methods has been brought up, including matrix factoriz
 Early stop \cite{teerapittayanon2016branchynet, panda2016conditional} is an architecture with branches and will stop calculating once a branch is enough confident that an image has been classified correctly. Early stop contains various architectures to achieve energy efficiency through reducing unnecessary computation. This is orthogonal to runtime specialization and could be included into the model bank.
 
 \section{Conclusion and Future Work} \label{conclusion}
-We have presented SECS, a real-time deep stream processing system. We identified an environment class skew, that is easily available and can both increase accuracy and decrease resource consumption. To efficiently utilize the runtime class skew, we bring up probability layer, which is easy to implement and can role as a highly flexible add-on module to existing methods. We further identified the class skew dichotomy. To aggressively prune the model towards the hot class skews, we propose class-specific pruning methods, which can bring extra benefit based on whether not a group of classes is easy to classify.
+We have presented SECS, a real-time deep stream processing system. We identified an environment class skew, that is easily available and can both increase accuracy and decrease resource consumption. Probability layer is brought up to efficiently utilize the class skew. We further identified the class skew dichotomy. To conduct class-specific pruning for hot class skews, we propose perforation, which can bring extra benefit based on whether not a group of classes is easy to classify.
 
 
+\newpage
+\clearpage
 
 
 
