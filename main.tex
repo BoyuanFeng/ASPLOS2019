@@ -267,7 +267,7 @@ In this section, we introduce class-specific pruning, which can optimize the mod
 
 
 \paragraph{Class-specific pruning.} 
-We observe that some groups of classes are much harder to classify than others, as indicated in Figure \ref{fig:classEffect}. For example, it is much easier to classify house, cat, dog, and tree than distinguishing four different cat species. In fact, distinguishing four different cat species requires expertise in cat species and carefully check on subtle features, i.e. ear size, tail length, coat patterns, and sometimes even personality \cite{cat2018}. Through a series of experiments, we found that classes with low similarity have much higher testing accuracy than classes with high similarity even if the model architecture and the number of classes remain unchanged. Specifically, using a CNN model with 4 convolutional layers and 3 fully connected layers, the accuracy is only 31.49\% to classify baby, boy, girl, man, woman from CIFAR100 while the accuracy would increase to 66.5\% when classifying bottles, bowls, cans, cups and plates. Following along this line of thought, with the same targetting accuracy, models could consume less resource to classify a group of classes with high difference. 
+We observe that some groups of classes are much harder to classify than others, as indicated in Figure \ref{fig:classEffect}. It is much easier to classify house, cat, dog, and tree than distinguishing four different cat species. In fact, distinguishing four different cat species requires expertise in cat species and carefully check on subtle features, i.e. ear size, tail length, coat patterns, and sometimes even personality \cite{cat2018}. Through a series of experiments, we found that classes with low similarity have much higher testing accuracy than classes with high similarity even if the model architecture and the number of classes remain unchanged. Specifically, using a CNN model with 4 convolutional layers and 3 fully connected layers, the accuracy is only 31.49\% to classify baby, boy, girl, man, woman from CIFAR100 while the accuracy would increase to 66.5\% when classifying bottles, bowls, cans, cups and plates. Following along this line of thought, with the same targetting accuracy, models could consume less resource to classify a group of classes with high difference. 
 
 To do so, during the hyper-parameter selection process, instead of the original dataset with all possible classes, a specialized dataset with only targetted classes are used and the accuracy on the specialized dataset is treated as standard to select the model with least resource consumption and best performance. Class-specific pruning is challenging since hyper-parameter selection process is time consuming. For every new sets of hyper-parameters, the model need to be retrained, which may take days or even weeks. Perforation is brought up to reduce the overhead, as detailed in section \ref{perforation}.
 
@@ -525,8 +525,8 @@ We evaluate the probability layer on the noisy environment, in which a few major
      Dense-40 \cite{huang2017densely} & 72.45 & 1.12 & 264.85 \\
      Dense-13 \cite{huang2017densely}& 58.89 & 0.09 & 21.88 \\
      \hline
-     DenseP A (Ours)& 71.26 & 1.12 & 139.49 \\
-     DenseP B (Ours)& 61.61 & 0.10 & 24.90 \\
+     DenseP-A (Ours)& 71.26 & 1.12 & 139.49 \\
+     DenseP-B (Ours)& 61.61 & 0.10 & 24.90 \\
      \hline
     \end{tabular}
 \end{table}
@@ -538,17 +538,17 @@ We evaluate the probability layer on the noisy environment, in which a few major
     \centering
     \begin{tabular}{ c|c|cc } 
      \hline
-     Network & Acc. (\%) & Parameters & Computation \\ 
+     Network & Acc. (\%) & Para. (M) & Com. (M) \\ 
      \hline
-     2 classes A & 72.45 & $P_A$ & $C_A$ \\
-     2 classes B & B & $P_A$ & $P_B$ \\
-     2 classes B & 72.45 & $P_B$ & $C_B$ \\
+     5 classes A & 77.12 & 1.12 & 139.49 \\
+     5 classes B & 97.40 & 1.12 & 139.49 \\
+     5 classes B & 78.63 & 0.10 & 24.90 \\
      \hline
-     5 classes C & 72.45 & $P_A$ & $C_A$ \\
-     5 classes D & B & $P_A$ & $P_B$ \\
-     5 classes D & 72.45 & $P_B$ & $C_B$ \\
+     10 classes C & 82.90 & 1.12 & 139.49 \\
+     10 classes D & 96.80 & 1.12 & 139.49 \\
+     10 classes D & 77.80 & 0.10 & 24.90 \\
      \hline
-     Original Model & 72.45 & P & C \\
+     Original Model & 72.45 & 1.12 & 264.85 \\
      \hline
     \end{tabular}
 \end{table}
@@ -559,22 +559,18 @@ We evaluate the probability layer on the noisy environment, in which a few major
 
 \begin{table}
     \centering
-    \begin{tabular}{c|ccc|ccc}
+    \begin{tabular}{c|c|cc}
     \hline
-    \multirow{2}{*}{Segments} & \multicolumn{3}{c|}{disabled} &  \multicolumn{3}{c}{enabled}\\
-        & Acc & Para & Comp & Acc & Para & Comp    \\
+    \multirow{2}{*}{Segments} & \multicolumn{1}{c|}{disabled} &  \multicolumn{2}{c}{enabled}\\
+        & Acc. (\%)  & Acc. (\%)  & Comp. (M)    \\
     \hline
-    (random)      & 72.45 & A & M & 72.45 & A & M \\
+    (random)      & 72.45  & 72.45  & 264.85 \\
     \hline
-    (n=5,p=.9)      & \multirow{2}{*}{A} & \multirow{2}{*}{L} & \multirow{2}{*}{A} & \multirow{2}{*}{L} \\
-    +(random) & & & & \\
+    (n=5,p=.9)      & \multirow{2}{*}{74.23} & \multirow{2}{*}{74.82}  & \multirow{2}{*}{144.9}\\
+    +(random) & &  & \\
     \hline
-    (n=5,p=.9)      & \multirow{2}{*}{A} & \multirow{2}{*}{L} & \multirow{2}{*}{A} & \multirow{2}{*}{L} \\
-    +(random) & & & & \\
-    
-    \hline
-    (n=15,p=.9)      & \multirow{2}{*}{A} & \multirow{2}{*}{L} & \multirow{2}{*}{A} & \multirow{2}{*}{L} \\
-    +(n=10,.8) & & & & \\
+    (n=20,p=.9)      & \multirow{2}{*}{76.43} & \multirow{2}{*}{84.85}  & \multirow{2}{*}{82} \\
+    +(n=10,.8) &  & & \\
     \hline
 
     
@@ -587,7 +583,18 @@ We evaluate the probability layer on the noisy environment, in which a few major
 
 
 \subsection{Perforation}
-Table \ref{tab:generalPrune} shows the effect of perforation as a general pruning methods.
+Table \ref{tab:generalPrune} shows the effect of perforation as a general pruning methods. The base model is the Dense-40 \cite{huang2017densely} with $40$ layers. DenseP-A is a model pruned by neuron-wise perforation, in which half computation is saved at a loss of accuracy as $1.19\%$. DenseP-A does not save parameters since neuron-wise perforation only skip computation at certain positions and has no influence over filters. Combining all three levels of perforation, we can generate DenseP-B, with both reduction in parameters and computations. Comparing DenseP-B with AlexNet \cite{NIPS2012_4824}, a model widely adopted in practice, only $600x$ less parameters and $12x$ less computation are needed to get a higher accuracy.
+
+
+DenseP-B is generated by combining both 
+
+
+To show the power of perforation, we co 
+
+prune aggressively,  
+
+
+and DenseP-B are two models pruned by 
 
 Table \ref{tab:csPruning} shows the effect of perforation on class-specific pruning.
 
