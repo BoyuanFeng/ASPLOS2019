@@ -50,7 +50,7 @@
 \thispagestyle{empty}
 
 \begin{abstract}
-As accelerating CNNs receives an increasing research focus, the save in resource always comes with a decrease in accuracy. To both increase accuracy and decrease resource consumption, we explore an environment information, called \textit{class skew}, which is easily available and exists widely in day-to-day life. Since the class skew may switch as time goes, we bring up \textit{probability layer} to utilize class skew without any overhead during the runtime. Further, we observe \textit{class skew dichotomy} that some class skew may appear frequently in the future, called \textit{hot class skew} and others will never appear again, called \textit{cold class skew}. Inspired by techniques from source code optimization, two modes, i.e., interpretation and compilation, are proposed. The interpretation mode pursues efficient adaption during runtime for cold class skew and the compilation mode aggressively optimize on hot ones for more efficient deployment in the future. Aggressive optimization is processed by class-specific pruning and provides extra benefit. Finally, we design a systematic framework, SECS, to dynamically detect class skew, processing interpretation and compilation, as well as select the most accurate architectures under the runtime resource budget. Evaluations on recognizing faces in TV shows and movies show that SECS can realize end-to-end classification speedups of xxx/xxx (on GPU/CPU) relative to a state-of-the-art convolutional neural network, at competitive accuracy.
+Despite accelerating CNNs receives an increasing research focus, the save in resource consumption always comes with a decrease in accuracy. To both increase accuracy and decrease resource consumption, we explore an environment information, called \textit{class skew}, which is easily available and exists widely in day-to-day life. Since the class skew may switch as time goes, we bring up \textit{probability layer} to utilize class skew without any overhead during the runtime. Further, we observe \textit{class skew dichotomy} that some class skew may appear frequently in the future, called \textit{hot class skew}, and others will never appear again, called \textit{cold class skew}. Inspired by techniques from source code optimization, two modes, i.e., interpretation and compilation, are proposed. The interpretation mode pursues efficient adaption during runtime for cold class skew and the compilation mode aggressively optimize on hot ones for more efficient deployment in the future. Aggressive optimization is processed by class-specific pruning and provides extra benefit. Finally, we design a systematic framework, SECS, to dynamically detect class skew, processing interpretation and compilation, as well as select the most accurate architectures under the runtime resource budget. Evaluations on recognizing faces in TV shows and movies show that SECS can realize end-to-end classification speedups of xxx/xxx (on GPU/CPU) relative to a state-of-the-art convolutional neural network, at competitive accuracy.
 \end{abstract}
 
 
@@ -189,7 +189,30 @@ where $\mathcal{W}_l \in \mathbb{R}^{C_l \: \times \:   d \: \times \: d \: \tim
 In this section, we introduce the probability layer, which can adapt the general model towards the class skew without any overhead.
 
 \paragraph{Key Assumption.} 
-The main difference between the proposed layer and the original CNNs is that we take into consideration the environment information. In original CNNs, the prediction for each image will be made individually, assuming a sequence of images is independent and identically distributed (\textit{i.i.d}). However, in real life, this assumption does not hold and strong temporal and spatial locality may exist. Instead, we assumes class skew exists, which means the number of classes and class types are fixed during a time period. While we assume that a class skew may exist for a time period, it is still possible that the class skew switches to another class skew after a few minutes, which can be detected and handled by the profiler, as detailed in section \ref{profilerSection}. Further, we assume the existence of a model classifying all possible classes, called the \textit{general model}. This assumption is reasonable because modern CNNs can be trained to classify thousands of classes \cite{krizhevsky2012imagenet, simonyan2014very, szegedy2015going, he2016deep, huang2017densely} and human faces \cite{parkhi2015deep, schroff2015facenet, taigman2015web}.
+The main difference between the proposed layer and the original CNNs is that we take the environment information into consideration. In original CNNs, the prediction for each image will be made individually, assuming a sequence of images is independent and identically distributed (\textit{i.i.d}). However, in real life, this assumption does not hold and strong temporal and spatial locality may exist. Instead, we assumes class skew exists, which means the number of classes and class types are fixed during a time period. Meanwhile, it is still possible that the class skew switches to another class skew after a few minutes, which can be detected and handled by the profiler, as detailed in section \ref{profilerSection}. Further, we assume the existence of a model classifying all possible classes, called the \textit{general model}. This assumption is reasonable because modern CNNs can be trained to classify thousands of classes \cite{krizhevsky2012imagenet, simonyan2014very, szegedy2015going, he2016deep, huang2017densely}.
+
+
+
+\begin{figure}[t]
+\begin{subfigure}{.23\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{rocket.png}
+  \caption{Rocket}
+  \label{fig:sub2}
+\end{subfigure}
+\begin{subfigure}{.23\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{bottle.png}
+  \caption{Bottle}
+  \label{fig:sub3}
+\end{subfigure}
+\label{fig:exampleSimilar}
+\caption{Examples of similar classes.}
+\end{figure}
+
+
+
+
 
 \paragraph{Intuition.}
 Probability layer helps by using environment information that original CNNs does not use. When human recognizes an object, both vision and environment information will be used, i.e., what we have seen recently and which objects may appear here. However, CNNs can only make use of visual information while discarding environment information, which makes it extremely difficult to distinguish classes with similar appearance. For example, Figure \ref{fig:sub2} and Figure \ref{fig:sub3} shows images for bottle and rocket respectively. It is hard to distinguish these two classes only from images while environment information can easily rule out rocket in most scenarios. 
@@ -198,6 +221,13 @@ Figure \ref{fig:intuition} gives intuition on how probability layer utilize envi
 %how to select general model?
 
 
+\begin{figure}
+  \centering
+  \includegraphics[width=.45\textwidth]{intuition.png}
+\caption{Intuition on how probability layer and softmax layer take effect together.}
+  \label{fig:intuition}
+
+\end{figure}
 
 \paragraph{Approach. } Probability layer is an extra layer after the CNN model, rescaling the output of softmax layer. Rescaling is a topic in statistics \cite{saerens2002adjusting}. To the best of our knowledge, we are the first to discuss rescaling in CNN context. The outputs of original CNNs predict the probability for each class and the probability layer will adjust this prediction based on the difference of class distribution in training and testing dataset. In particular, for classes with different distributions in training and testing dataset, the probability layer will rescale the corresponding outputs from softmax layer according to the difference in distribution. For other classes with same distribution in both training and testing dataset, the outputs of the proposed layer are equal to the outputs of the softmax layer. 
 
@@ -228,33 +258,6 @@ To give probability layer the ability to detect new classes, we choose not to re
 , where $\omega$ is the threshold above which we should trust the original prediction and $I_X$ is the indicator function such that
 $I_X(x) \delequal \; $if $x\in X$, return $1$, otherwise return $0$.
 If a model have a strong confidence in its prediction, the accuracy would be much higher than the model's average accuracy. Our experiments show that CNNs will give most of the images high predicted probability and the accuracy of these images will exceed average accuracy a lot. Probability layer helps when the original model is confused on the prediction and will not interfere the decision when the original model has confidence in its prediction.
-
-
-
-\begin{figure}[t]
-\begin{subfigure}{.23\textwidth}
-  \centering
-  \includegraphics[width=\textwidth]{rocket.png}
-  \caption{Rocket}
-  \label{fig:sub2}
-\end{subfigure}
-\begin{subfigure}{.23\textwidth}
-  \centering
-  \includegraphics[width=\textwidth]{bottle.png}
-  \caption{Bottle}
-  \label{fig:sub3}
-\end{subfigure}
-\label{fig:exampleSimilar}
-\caption{Examples of similar classes.}
-\end{figure}
-
-\begin{figure}
-  \centering
-  \includegraphics[width=.45\textwidth]{intuition.png}
-\caption{Intuition on how probability layer and softmax layer take effect together.}
-  \label{fig:intuition}
-
-\end{figure}
 
 
 
@@ -514,12 +517,16 @@ We evaluate the probability layer on the noisy environment, in which a few major
     \centering
     \begin{tabular}{ c|c|cc } 
      \hline
-     Network & Acc. (\%) & Parameters & Computation \\ 
+     Network & Acc. (\%) & Para. (M) & Com. (M) \\ 
      \hline
-     A & B & C & D \\
-     A & B & C & D \\
-     A & B & C & D \\
-     A & B & C & D \\
+     AlexNet \cite{ahmed2016network, NIPS2012_4824} & 56.12 & 57.26 & 302.10 \\
+     SqueezeNet \cite{iandola2016squeezenet} & 56.73 & 0.78 & 730.10 \\
+     \hline
+     Dense-40 \cite{huang2017densely} & 72.45 & 1.12 & 264.85 \\
+     Dense-13 \cite{huang2017densely}& 58.89 & 0.09 & 21.88 \\
+     \hline
+     DenseP A (Ours)& 71.26 & 1.12 & 139.49 \\
+     DenseP B (Ours)& 61.61 & 0.10 & 24.90 \\
      \hline
     \end{tabular}
 \end{table}
@@ -533,15 +540,15 @@ We evaluate the probability layer on the noisy environment, in which a few major
      \hline
      Network & Acc. (\%) & Parameters & Computation \\ 
      \hline
-     2 classes A & 70 & $P_A$ & $C_A$ \\
+     2 classes A & 72.45 & $P_A$ & $C_A$ \\
      2 classes B & B & $P_A$ & $P_B$ \\
-     2 classes B & 70 & $P_B$ & $C_B$ \\
+     2 classes B & 72.45 & $P_B$ & $C_B$ \\
      \hline
-     5 classes A & 70 & $P_A$ & $C_A$ \\
-     5 classes B & B & $P_A$ & $P_B$ \\
-     5 classes B & 70 & $P_B$ & $C_B$ \\
+     5 classes C & 72.45 & $P_A$ & $C_A$ \\
+     5 classes D & B & $P_A$ & $P_B$ \\
+     5 classes D & 72.45 & $P_B$ & $C_B$ \\
      \hline
-     Original Model & 73.75\% & P & C \\
+     Original Model & 72.45 & P & C \\
      \hline
     \end{tabular}
 \end{table}
@@ -552,25 +559,24 @@ We evaluate the probability layer on the noisy environment, in which a few major
 
 \begin{table}
     \centering
-    \begin{tabular}{c|cc|cc}
+    \begin{tabular}{c|ccc|ccc}
     \hline
-    \multirow{2}{*}{Segments} & \multicolumn{2}{c|}{disabled} &  \multicolumn{2}{c}{enabled}\\
-        & acc(\%) & lat(ms)  & acc(\%) & lat(ms)    \\
+    \multirow{2}{*}{Segments} & \multicolumn{3}{c|}{disabled} &  \multicolumn{3}{c}{enabled}\\
+        & Acc & Para & Comp & Acc & Para & Comp    \\
     \hline
-    (random)      & A & L & A & L \\
+    (random)      & 72.45 & A & M & 72.45 & A & M \\
     \hline
-    (n=5, p=.9)      & \multirow{2}{*}{A} & \multirow{2}{*}{L} & \multirow{2}{*}{A} & \multirow{2}{*}{L} \\
+    (n=5,p=.9)      & \multirow{2}{*}{A} & \multirow{2}{*}{L} & \multirow{2}{*}{A} & \multirow{2}{*}{L} \\
     +(random) & & & & \\
     \hline
-    (n=15, p=.9)      & \multirow{2}{*}{A} & \multirow{2}{*}{L} & \multirow{2}{*}{A} & \multirow{2}{*}{L} \\
-    +(n=10,p=.8) & & & & \\
-    \hline
-    (n=10, p=.9)      & \multirow{3}{*}{A} & \multirow{3}{*}{L} & \multirow{3}{*}{A} & \multirow{3}{*}{L} \\
-    +(n=20,p=.8) & & & & \\
-    +(n=30,p=.7) & & & & \\
+    (n=5,p=.9)      & \multirow{2}{*}{A} & \multirow{2}{*}{L} & \multirow{2}{*}{A} & \multirow{2}{*}{L} \\
+    +(random) & & & & \\
     
     \hline
-    
+    (n=15,p=.9)      & \multirow{2}{*}{A} & \multirow{2}{*}{L} & \multirow{2}{*}{A} & \multirow{2}{*}{L} \\
+    +(n=10,.8) & & & & \\
+    \hline
+
     
     \end{tabular}
     \caption{Results on synthesized datasets}
