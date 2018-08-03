@@ -14,7 +14,7 @@ all:
 
 
 clean:
-	-rm -rf main.pdf main.synctex.gz main.out main.tpt main.aux main.bbl main.blg main.dvi main.log main.ps *~
+	-rm -rf main.pdf main.synctex.gz main.out main.tpt main.aux main.bbl main.blg main.dvi main.log main.ps *~ *.pdf
 
 sources:
 	@echo  ${SOURCES}
