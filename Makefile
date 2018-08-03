@@ -7,10 +7,10 @@ default:
 	pdflatex  -shell-escape main.tex
 
 all:  
-	pdflatex main.tex
+	pdflatex --shell-escape main.tex
 	bibtex main
-	pdflatex main.tex
-	pdflatex main.tex
+	pdflatex --shell-escape main.tex
+	pdflatex --shell-escape main.tex
 
 
 clean:

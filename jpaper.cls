@@ -1,6 +1,6 @@
 \NeedsTeXFormat{LaTeX2e}
 % \ProvidesClass{jpaper}[ASPLOS 2014 Submission template]
-\ProvidesClass{jpaper}[2012/08/02 ISCA Submission template]
+\ProvidesClass{jpaper}
 
 % jpaper provides two modes:
 % In addition to the usual options leqno and fleqn, jpaper also provides the
@@ -64,11 +64,10 @@
 \RequirePackage{titling}
 \setlength{\droptitle}{-3.5em}
 
-\pretitle{\begin{center}\vspace{-.5in}
-ASPLOS Submission \#\asplossubmissionnumber -- Confidential Draft -- Do Not Distribute!!\\
-\vspace{.35in}
-\normalfont\Large\bfseries}
-\posttitle{\par\end{center}}
+\pretitle{\begin{center}
+\Large\bfseries}
+\posttitle{\\ \normalfont\small ASPLOS Submission \#\asplossubmissionnumber -- Confidential Draft -- Do Not Distribute!
+\par\end{center}}
 \preauthor{\begin{center}\normalfont\large%
     \begin{tabular}[t]{c}}
 \postauthor{\end{tabular}\par\end{center}}
@@ -125,7 +124,7 @@ ASPLOS Submission \#\asplossubmissionnumber -- Confidential Draft -- Do Not Dist
 % Settings for figures and tables. Figure captions are placed below the figure,
 % while table captions are placed above the table. All captions are sans-serif.
 \RequirePackage[font={normalsize,sf,bf}]{caption}
-\RequirePackage[position=bottom]{subcaption}
+\RequirePackage[position=bottom]{subfig}
 \captionsetup[table]{aboveskip=0.5em, belowskip=0.5em}
 \captionsetup[figure]{aboveskip=0.5em, belowskip=0em}
 \captionsetup[subfloat]{font={small,sf}}

@@ -17,9 +17,7 @@
 \usepackage{amsmath}
 \usepackage{graphicx}
 \usepackage{caption}
-\usepackage{subcaption}
 \usepackage{amssymb}
-
 
 %\usepackage[colorinlistoftodos]{todonotes}
 \usepackage{algorithm}
@@ -31,8 +29,9 @@
 \floatstyle{plaintop}
 \restylefloat{table}
 
-\usepackage{graphicx,epstopdf}
-\epstopdfsetup{update}
+\usepackage{graphicx}
+\usepackage[outdir=./]{epstopdf}
+\epstopdfsetup{outdir=./}
 \DeclareGraphicsExtensions{.ps}
 \epstopdfDeclareGraphicsRule{.ps}{pdf}{.pdf}{ps2pdf -dEPSCrop -dNOSAFER #1 \OutputFile}
 
@@ -86,7 +85,7 @@ Class-specific pruning is challenging because retraining the whole model is requ
 
 %Instead, we observe that CNNs often have strong redundancy inside its structure, i.e., within feature maps, across channels, and across layers. Inspired by the loop perforation technique from source code optimization \cite{figurnov2016perforatedcnns}, we can speed up computation by skipping their evaluation in some of the positions. We further observe that different positions has different redundancy and we can select the hyper-parameter according to their influence over final accuracy. Based on these insight, we propose a framework, called \textit{perforation}, for selecting hyper-parameters in three levels; i.e., neuron-wise, channel-wise, and layer-wise, without any finetune for the new architecture and agnostic to the model architecture. While carefully hand-crafted architecture, SqueezeNet, achieves AlexNet-level accuracy with $50$x less parameters, perforation can reach $600$x reduction in parameters while also achieve AlexNet-level accuracy. Perforation is orthogonal to matrix factorization, matrix pruning, quantization, and group convolution, and can be combined with all for further optimization. When combined with runtime class skew, perforation can prune the model according to which classes appear in current environment and only maintain the important path for appearing classes.
 
-In this paper, we present \textbf{SECS}, an efficient deep stream processing service. SECS efficiently detects and utilizes runtime class skew and prunes the candidate model according to the environment and the resource budget, as detailed in section \ref{SECS}. We carefully design a profiler to detect the class skew. Once the class skew is detected, the profiler will further decide whether the class skew is a hot class skew or a cold one. For cold class skews, probability layer is utilized to efficiently adapt the model towards the class skew during runtime with no overhead. If the class skew is marked a hot one, the profiler will aggressively optimize the model with class-specific pruning after the resource constraint is resolved. The adapted models will be stored in model bank and during runtime a scheduling model based on control theory will dynamically select the Pareto-optimal models under the available resource budget. Extensive evaluation shows that our system can potentially reduce the computation by xx times and memory consumption by xx times.
+In this paper, we present \textbf{SECS}, an efficient deep stream processing service. SECS efficiently detects and utilizes runtime class skew and prunes the candidate model according to the environment and the resource budget, as detailed in section \ref{SECS}. We carefully design a profiler to detect the class skew. Once the class skew is detected, the profiler will further decide whether the class skew is a hot class skew or a cold one. For cold class skews, probability layer is utilized to efficiently adapt the model towards the class skew during runtime with no overhead. If the class skew is marked a hot one, the model will be optimized aggressively with class-specific pruning after the resource constraint is resolved. The adapted models will be stored in model bank and during runtime a scheduling model based on control theory will dynamically select the Pareto-optimal models under the available resource budget. Extensive evaluation shows that our system can potentially reduce the computation by xx times and memory consumption by xx times.
 
 In summary, we make the following contributions:
 
@@ -165,7 +164,7 @@ We address these challenges by probability layer, an efficient model adaption al
 \label{fig:Architecture}
 \end{figure}
 
-SECS is a real-time deep stream processing system utilizing class skew efficiently and conducting class specific pruning automatically, as detailed in Figure \ref{fig:Architecture}. The \texttt{AppListener} maintains a threadpool, summarizes the requests from upper-level applications into a stream, and forwards the stream into \texttt{profiler} for further procedure. During runtime, the \texttt{profiler} maintains current class distribution and effectively detect class skew. Once class skew is detected, the \texttt{profiler} will either call existing adapted model from \texttt{model bank}, or require the \texttt{probability layer} to efficiently adapt the model. The classification results will be feed back to \texttt{profiler} which will both respond the \texttt{AppListener} and update class skew. During cold time, the \texttt{profiler} will check whether a class skew has appeared more frequently than a pre-defined threshold, and call \texttt{perforation} to generate class-specific pruned models for more optimized classification in the future. We discuss the individual steps next.
+SECS is a real-time deep stream processing system utilizing class skew efficiently and conducting class specific pruning automatically, as detailed in Figure \ref{fig:Architecture}. The \texttt{AppListener} maintains a threadpool, summarizes the requests from upper-level applications into a stream, and forwards the stream into \texttt{profiler} for further procedure. During runtime, the \texttt{profiler} maintains current class distribution and effectively detect class skew. The class skew information will be provided to \texttt{scheduler}. Once class skew is detected, the \texttt{scheduler} will either call existing adapted model from \texttt{model bank}, or require the \texttt{probability layer} to efficiently adapt the model. The classification results will be feed back, through \texttt{scheduler}, to \texttt{profiler} which will both respond the \texttt{AppListener} and update class skew. When \texttt{profiler} detects that a class skew has appeared more frequently than a pre-defined thershold, it will inform the \texttt{scheduler}. Then, during cold time, the \texttt{scheduler} will call \texttt{perforation} to generate class-specific pruned models for more optimized classification in the future. We discuss the individual steps next.
 
 
 
@@ -193,6 +192,20 @@ The main difference between the proposed layer and the original CNNs is that we 
 
 
 
+   \begin{figure}
+     \subfloat[Rocket\label{fig:sub2}]{%
+       \includegraphics[width=0.23\textwidth]{rocket.png}
+     }
+     \hfill
+     \subfloat[Bottle\label{fig:sub3}]{%
+       \includegraphics[width=0.23\textwidth]{bottle.png}
+     }
+     \caption{Examples of similar classes.}
+     \label{fig:exampleSimilar}
+   \end{figure}
+
+
+\iffalse
 \begin{figure}[t]
 \begin{subfigure}{.23\textwidth}
   \centering
@@ -209,7 +222,7 @@ The main difference between the proposed layer and the original CNNs is that we 
 \label{fig:exampleSimilar}
 \caption{Examples of similar classes.}
 \end{figure}
-
+\fi
 
 
 
@@ -332,8 +345,8 @@ Also note that in MobileNet \cite{howard2017mobilenets}, reducing resolution is 
 
 
 
-\subsection{Profiler} \label{profilerSection}
-Profiler detects class skew and makes a series of decisions on whether or not a class skew exists, which model to run, and whether a class-specific pruning is necessary or not. We phrase the class skew detection problem as a oracle Bandit problem \cite{auer2002finite, lai1985asymptotically} and utilize WEG algorithm \cite{shen2016fast} to solve it efficiently.
+\subsection{Profiler and scheduler} \label{profilerSection}
+Profiler detects class skew and makes a series of decisions on whether or not a class skew exists. The information on class skew will be forwarded to scheduler for further decisions on which model to run and whether a class-specific pruning is necessary or not. We phrase the class skew detection problem as a oracle Bandit problem \cite{auer2002finite, lai1985asymptotically} and utilize WEG algorithm \cite{shen2016fast} to solve it efficiently.
 
 Let denote a stream of images to be classified as $x_1, \: x_2, \: ...,\: x_i, \: ... \in X = \mathbb{R}^n$ and the corresponding true labels as $y_1, \:y_2, \:...,\:y_i, \:... \in Y = [1, ..., k]$. Assume a partition $\pi: I^+ \rightarrow I^+$ over the stream exists, where each partition maintains a distribution $T_{\pi(i})$ and the image $(x_i, y_i)$ is drawn randomly from distribution $T_{\pi(i)}$. Here, the overall series is an abruptly-changing and piece-wise stationary distribution. At test time, neither true labels $y_i$ nor partition $\pi$ is known. Also we do not have any assumptions on how long a stationary distribution exist. The task of profiler is to detect the stationary distribution when it appears and switch to another stationary distribution when it switches.
 
@@ -368,9 +381,9 @@ The emergence and disapperance of class skew can be detected by the WEG algorith
 \end{algorithm}
 
 
-The detected class skew will be processed by the profiler, as detailed by line \ref{alg: scheduler}. The profiler will import the class-specific pruned models in the model bank if available. If no class-specific pruned model is available, the profiler will call the probability layer to adapt the models immediately. These candidate models will serve further decisions along with recorded properties, i.e. energy and memory consumption, as well as accuracy. Then the profiler estimate the energy per frame by the average of available resource over remaining times and frames. Finally, $ChooseModel$ will return the most accurate model under current resource budget. 
+The detected class skew will be processed by the scheduler, as detailed by line \ref{alg: scheduler}. The scheduler will import the class-specific pruned models in the model bank if available. If no class-specific pruned model is available, the scheduler will call the probability layer to adapt the models immediately. These candidate models will serve further decisions along with recorded properties, i.e. energy and memory consumption, as well as accuracy. Then the scheduler estimates the energy per frame by the average of available resource over remaining times and frames. Finally, $ChooseModel$ will return the most accurate model under current resource budget. 
 
-While original WEG algorithm \cite{shen2016fast} builds a complex scheduling model for trade-off between accuracy benefit and cost from runtime finetuning, our profiler does not need it, since the probability layer produces adapted model efficiently and class-specific pruned model are also not produced during runtime. In addition, the detection of change in class skew can be achieved by equation \ref{eq: recover}, since the probability layer will not interfere the decision when the original model has confidence in its prediction.
+While original WEG algorithm \cite{shen2016fast} builds a complex scheduling model for trade-off between accuracy benefit and cost from runtime finetuning, our scheduler does not need it, since the probability layer produces adapted model efficiently and class-specific pruned model are also not produced during runtime. In addition, the detection of change in class skew can be achieved by equation \ref{eq: recover}, since the probability layer will not interfere the decision when the original model has confidence in its prediction.
 
 
 
@@ -435,24 +448,64 @@ We implemented probability layer on DenseNet \cite{huang2017densely} and evaluat
 \subsection{Class effect}
 We explore the effect of class combinations and compare the performance of probability layer and transfer learning on various class combinations. Fixing the number of classes as two, we randomly selected five class combinations and compare the original model, model after transfer learning, and the model with probability layer, see Figure \ref{fig:classEffectExamples}. We see that with the same model, different class combinations may have dramatically different accuracy. While the original model can achieve a accuracy as 83\% for classifying chair and cup, the accuracy for beaver and bear is only 52.5\%. We can also observe that both transfer learning and probability layer can bring in benefit no matter which two classes compose the dataset while probability layer generally performs better than transfer learning. In the randomly selected five class combinations, probability layer can provide an additional benefit of $2.16\%$ on average.
 
-Figure \ref{fig:classEffectSummary} gives a summary of the performance of all three models on the specialized dataset with two and five classes. The figure shows the result from $100$ randomly selected class combinations. We see that, on the original model, while the average accuracy for classifying two classes is $70\%$, the minimum accuracy could be $45\%$ and the maximum accuracy can reach $83\%$, which shows that the accuracy of classifying two classes could change dramatically even using the same model. This observation also holds for transfer learning and probability layer. We can also note that the average accuracy of probability layer is much higher than transfer learning. 
 
+
+   \begin{figure}
+     \subfloat[Concrete examples\label{fig:classEffectExamples}]{%
+       \includegraphics[width=0.235\textwidth]{classEffectLine}
+     }
+     \hfill
+     \subfloat[Summary of class effect\label{fig:classEffectSummary}]{%
+       \includegraphics[width=0.235\textwidth]{classEffect}
+     }
+     \caption{Class effect on the original model, the model after finetuning, and the model with probability layer.} \label{fig:classEffect1}
+   \end{figure}
+
+\iffalse
 \begin{figure}[t]
     \begin{subfigure}[b]{0.235\textwidth}
         %\centering
-        \includegraphics[width=\textwidth]{classEffectLine.png}
+        \includegraphics[width=\textwidth]{classEffectLine.ps}
         \caption{Concrete examples}
         \label{fig:classEffectExamples}
     \end{subfigure}
     \begin{subfigure}[b]{0.235\textwidth}
         %\centering
-        \includegraphics[width=\textwidth]{classEffect.png}
+        \includegraphics[width=\textwidth]{classEffect.ps}
         \caption{Summary of class effect}
         \label{fig:classEffectSummary}
     \end{subfigure}
     \caption{Class effect on the original model, the model after finetuning, and the model with probability layer.} \label{fig:classEffect1}
 \end{figure}
+\fi
+
+
+Figure \ref{fig:classEffectSummary} gives a summary of the performance of all three models on the specialized dataset with two and five classes. The figure shows the result from $100$ randomly selected class combinations. We see that, on the original model, while the average accuracy for classifying two classes is $70\%$, the minimum accuracy could be $45\%$ and the maximum accuracy can reach $83\%$, which shows that the accuracy of classifying two classes could change dramatically even using the same model. This observation also holds for transfer learning and probability layer. We can also note that the average accuracy of probability layer is much higher than transfer learning. 
+
+
+
+\begin{figure}[!tbp]
+  \centering
+  \begin{minipage}[b]{0.235\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{PLvsRetrain}
+        \caption{Performance on different number of classes}
+        \label{fig:PLvsRetrain}
+  \end{minipage}
+  \hfill
+  \begin{minipage}[b]{0.235\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{threshold}
+        \caption{Accuracy under different threshold}
+        \label{fig:threshold}
+  \end{minipage}
+\end{figure}
+
+
+
+
 \subsection{Results on specialized datasets with only majority classes}
+
 
 % Third paragraph: Experiment setting
 We explore probability layer's ability on making use of environment when there are only a few majority classes. For each number of classes, we randomly sampled $100$ subsets of classes and present the average accuracy in Figure \ref{fig:PLvsRetrain}. We see that significant benefit has been achieved by probability layer for all number of classes. When there are 5 classes, an increase of more than $20\%$ can be achieved without any finetuning. Another point worth noting is that the benefit diminishes gradually as the number of classes increases. Even if there are $40$ classes, a benefit over $10\%$ could still be observed. This shows a significant advantage over previously published results \cite{shen2016fast}, in which no benefit exists when there are more than $15$ classes.
@@ -466,41 +519,40 @@ We justify our design of threshold in probability layer (euqation \ref{eq: recov
 We also note that a large portion of images can get a high predicted probability from the original model. For instance, there are more than 60\% images get predicted probability higher than 95\%. For these images that the original model has strong confidence in its prediction, the probability layer will not interfere with the decision. The probability layer will step in when the original model is not sure and give suggestion to the probability layer according to the environment information. 
 
 
-\begin{figure}[!tbp]
-  \centering
-  \begin{minipage}[b]{0.235\textwidth}
-        \centering
-        \includegraphics[width=\textwidth]{PLvsRetrain.png}
-        \caption{Performance on different number of classes}
-        \label{fig:PLvsRetrain}
-  \end{minipage}
-  \hfill
-  \begin{minipage}[b]{0.235\textwidth}
-        \centering
-        \includegraphics[width=\textwidth]{threshold.png}
-        \caption{Threshold}
-        \label{fig:threshold}
-  \end{minipage}
-\end{figure}
 
+
+   \begin{figure}
+     \subfloat[Five classes with various distribution\label{fig:variousDistribution5}]{%
+       \includegraphics[width=0.235\textwidth]{variousPercentage5}
+     }
+     \hfill
+     \subfloat[Ten classes with various distribution\label{fig:variousDistribution10}]{%
+       \includegraphics[width=0.235\textwidth]{variousPercentage10}
+     }
+     \caption{Probability layer on denseNet}\label{fig:complex}
+   \end{figure}
+
+
+
+\iffalse
 \begin{figure}
     \centering
     \begin{subfigure}[b]{0.235\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{variousPercentage5.png}
+        \includegraphics[width=\textwidth]{variousPercentage5.ps}
         \caption{Five classes with various distribution}
         \label{fig:variousDistribution5}
     \end{subfigure}
     \begin{subfigure}[b]{0.235\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{variousPercentage10.png}
+        \includegraphics[width=\textwidth]{variousPercentage10.ps}
         \caption{Ten classes with various distribution}
         \label{fig:variousDistribution10}
     \end{subfigure}
 
     \caption{Probability layer on denseNet}\label{fig:complex}
 \end{figure}
-
+\fi
 
 
 
@@ -525,8 +577,8 @@ We evaluate the probability layer on the noisy environment, in which a few major
      Dense-40 \cite{huang2017densely} & 72.45 & 1.12 & 264.85 \\
      Dense-13 \cite{huang2017densely}& 58.89 & 0.09 & 21.88 \\
      \hline
-     DenseP-A (Ours)& 71.26 & 1.12 & 139.49 \\
-     DenseP-B (Ours)& 61.61 & 0.10 & 24.90 \\
+     DenseP1 (Ours)& 71.26 & 1.12 & 139.49 \\
+     DenseP2 (Ours)& 61.61 & 0.10 & 24.90 \\
      \hline
     \end{tabular}
 \end{table}
@@ -554,23 +606,50 @@ We evaluate the probability layer on the noisy environment, in which a few major
 \end{table}
 
 
+\subsection{Perforation}
+Table \ref{tab:generalPrune} shows the effect of perforation as a general pruning methods. The base model is the Dense-40 \cite{huang2017densely} with $40$ layers. DenseP1 is a model pruned by neuron-wise perforation, in which half computation is saved at a loss of accuracy as $1.19\%$. DenseP1 does not save parameters since neuron-wise perforation only skip computation at certain positions and has no influence over filters. Combining all three levels of perforation, we can generate DenseP2, with both reduction in parameters and computations. Only $600$x less parameters and $12$x less computation are needed to get a higher accuracy than AlexNet \cite{NIPS2012_4824}, a model widely adopted in practice. Comparing with a state-of-the-art architecture with hand-crafted modules, SqueezeNet \cite{iandola2016squeezenet}, our automatically pruned architecture can achieve an extra accuracy of $4.88\%$ with $8x$ less parameters and $29x$ less computation. 
+
+The automatically pruning process also provides intuition for designing architecture. The DenseNet-style architecture suggests to use same number of layers in each block, as the architecture in Dense-13. In contrast, the automatically pruned architecture suggest to use less layers in later blocks and gives DenseP2, with an extra accuracy of $2.72\%$ consuming similar computation and parameters as Dense-13.
+
+Table \ref{tab:csPruning} shows the effect of perforation on class-specific pruning. We randomly select four groups of classes, as detailed in Table \ref{tab:classGroups}, and conduct class-specific pruning on these groups. On DenseP1, group B can have an extra accuracy of $20.28\%$. Compred with group A on DenseP1, group B can get an extra accuracy of $1.51\%$ with $10$x less parameters and $5.6$x less computation. Compared with the original model, the combination of group B and DenseNet-P2 can achieve an extra accuracy of $6.18\%$ utilizing $11.2$x less parameters and $10.5$x less computations. When number of classes in the class skew increase to $10$, similar phenomenon can also be observed. On groups with larger number of classes, \textit{e.g.} 10 classes, similar benefit can also be achieved. Note that, with the same model, group C can achieve an accuracy of $82.90\%$ while group A has a lower accuracy of $77.12\%$. This phenomenon is due to our random selection of classes and does not contrary to the general belief that less number of classes indicates higher accuracy. 
+
+
 
 
 
 \begin{table}
     \centering
-    \begin{tabular}{c|c|cc}
+    \begin{tabular}{c|c}
     \hline
-    \multirow{2}{*}{Segments} & \multicolumn{1}{c|}{disabled} &  \multicolumn{2}{c}{enabled}\\
-        & Acc. (\%)  & Acc. (\%)  & Comp. (M)    \\
+     5 classes A & Apple, Baby, Beaver, Boy, Girl \\
+     \hline
+     5 classes B & Bed, Crab, Bridge, Cloud, Hamster \\
+     \hline
+     \multirow{2}{*}{10 classes C} & Apple, Baby, Beaver, Boy, Girl, \\
+       & Honeybee, Beetle, Maple, Oak, Tank \\
+     \hline
+     \multirow{2}{*}{10 classes D} & Cloud, Baby, Motorcycle, Tank, Bridge, \\
+       & Hamster, Maple, Apple, Crab, Bottle\\
     \hline
-    (random)      & 72.45  & 72.45  & 264.85 \\
+    \end{tabular}
+    \caption{Randomly selected class groups}
+    \label{tab:classGroups}
+\end{table}
+
+
+\begin{table}
+    \centering
+    \begin{tabular}{c|cc}
     \hline
-    (n=5,p=.9)      & \multirow{2}{*}{74.23} & \multirow{2}{*}{74.82}  & \multirow{2}{*}{144.9}\\
-    +(random) & &  & \\
+    Segments  & Acc. (\%)  & Comp. (M)    \\
     \hline
-    (n=20,p=.9)      & \multirow{2}{*}{76.43} & \multirow{2}{*}{84.85}  & \multirow{2}{*}{82} \\
-    +(n=10,.8) &  & & \\
+    (random)      & 72.45  & 264.85 \\
+    \hline
+    (random)      & \multirow{2}{*}{74.82}  & \multirow{2}{*}{144.9}\\
+    +(n=5,p=.9) &   & \\
+    \hline
+    (n=20,p=.9)      & \multirow{2}{*}{84.85}  & \multirow{2}{*}{82} \\
+    +(n=10,.8) &  & \\
     \hline
 
     
@@ -581,33 +660,16 @@ We evaluate the probability layer on the noisy environment, in which a few major
 
 
 
-
-\subsection{Perforation}
-Table \ref{tab:generalPrune} shows the effect of perforation as a general pruning methods. The base model is the Dense-40 \cite{huang2017densely} with $40$ layers. DenseP-A is a model pruned by neuron-wise perforation, in which half computation is saved at a loss of accuracy as $1.19\%$. DenseP-A does not save parameters since neuron-wise perforation only skip computation at certain positions and has no influence over filters. Combining all three levels of perforation, we can generate DenseP-B, with both reduction in parameters and computations. Comparing DenseP-B with AlexNet \cite{NIPS2012_4824}, a model widely adopted in practice, only $600x$ less parameters and $12x$ less computation are needed to get a higher accuracy.
-
-
-DenseP-B is generated by combining both 
-
-
-To show the power of perforation, we co 
-
-prune aggressively,  
-
-
-and DenseP-B are two models pruned by 
-
-Table \ref{tab:csPruning} shows the effect of perforation on class-specific pruning.
-
 \subsection{Overall: Synthetic experiments}
+We evaluate our system on synthetically generated data under diverse settings. For this experiment, we generate a time series of images with various class skews. To generate a class skew of $n$ classes occupying $p$ percent of all images, we select $n$ classes out of $100$ classes in CIFAR100 occupying $p$ images in the testing dataset. The other $1-p$ images are drawn following the uniform distribution. Further, we combine two time series of images with different class skew to study the effect of moving from one class skew to another. Here, the two time series have same length.
+
+Table \ref{tab:synthe} shows the performance of our system under changing class skews. For segments with no class skew, denoted by "random", our system can achieve the same performance as Dense-40, since no class skew can be detected. When the class skew, $(n=5,p=0.9)$, starts to appear, our system can detect the class skew automatically and select optimized model according to the class skew. An extra accuracy of $2.37\%$ can be achieved while half computation can be saved, due to the benefit of using class skew. When the class skew starts with $(n=20,p=0.9)$ and ends with $(n=10,p=0.8)$, an extra accuracy of $12.4\%$ is achieved consuming $3$x less computations.  
 
 
-\subsection{Overall: Video experiments}
-
-
-\newpage
-\clearpage
 \section{Related Work} \label{relatedWork}
 SECS is a real-time deep stream processing system utilizing runtime class skew efficiently and conducting class specific pruning automatically.
+
+
 
 \paragraph{Class skew}
 Using class skew is an emerging method for both increasing accuracy and decreasing resource consumption \cite{han2016mcdnn, kang2017noscope, shen2016fast}. Our paper is distinguished from existing papers from two main points. First, we bring up probability layer to efficient adapt the model with no overhead, while existing papers relies on transfer learning to finetune the model towards the class skew during runtime. Specifically, our probability layer introduce no overhead into the runtime model adaption, which fits more for the resource-limited nature on mobile platforms. Secondly, we identify the class skew dichotomy and bring up two modes, interpretation and compilation, to optimize model differently according to whether a class skew is hot or not. Third, we propose class-specific pruning and bring up perforation to efficiently select the smallest model according to whether the targetting class groups is hard to classify or not.
@@ -615,7 +677,7 @@ Using class skew is an emerging method for both increasing accuracy and decreasi
 
 % Talk about transfer learning
 \paragraph{Transfer learning}
-Transfer learning has shown benefit in domain adaption and currently is the dominant method, if not the only one, for domain adaption. To solve the problem that the testing dataset is small, we use transfer learning \cite{oquab2014learning}. To use unsupervised dataset \cite{doersch2015unsupervised, noroozi2016unsupervised}, we use transfer learning. Assume we have a large model handling $1000$ classes and in an environment where only $10$ classes appearing, we still use transfer learning \cite{han2016mcdnn, shen2016fast}. Transfer learning has become the only method off the top of the head when we consider the change in classes. Although transfer learning shows various benefit, it also has intrinsic shortage residing in the process of training a CNN model. First, it is hard to decide how many layers we should freeze. Published papers \cite{yosinski2014transferable} reported that freezing fewer layers leads to better performance on different domains and freezing more layers lead to a better performance on similar domains since the co-adapted interactions between layers will be kept. However, it is still hard to decide whether two domains are similar enough and the exact effect of freezing a various number of layers. Second, transfer learning is hard to be conducted unless different settings has been tried. When choosing epoch numbers, it is hard to predict whether the model will converge or collapse after a pre-chosen number of epochs. The choice of learning rate also depends on both model and dataset. The choice of hyper-parameter needs expertise in finetuning, which is lacked by the automatical product. Third, the long latency and energy consumption of training a model obstacle the transfer learning on energy-efficient devices, especially in an environment that class number and distributions keep changing. Our approach, probability layer, can avoid finetuneing at all while adapting to the new dataset, thus all the inconvenience related to finetuneing is avoided naturally.
+Transfer learning has shown benefit in domain adaption and currently is the dominant method, if not the only one, for domain adaption. To solve the problem that the testing dataset is small, we use transfer learning \cite{oquab2014learning}. To use unsupervised dataset \cite{doersch2015unsupervised, noroozi2016unsupervised}, we use transfer learning. Assume we have a large model handling $1000$ classes and in an environment where only $10$ classes appearing, we still use transfer learning \cite{han2016mcdnn, shen2016fast}. Transfer learning has become the only method off the top of the head when we consider the change in classes. Although transfer learning shows various benefit, it also has intrinsic shortage residing in the process of training a CNN model. First, it is hard to decide how many layers we should freeze. Published papers \cite{yosinski2014transferable} reported that freezing fewer layers leads to better performance on different domains and freezing more layers lead to a better performance on similar domains since the co-adapted interactions between layers will be kept. However, it is still hard to decide whether two domains are similar enough and the exact effect of freezing a various number of layers. Second, transfer learning is hard to be conducted unless different settings has been tried. When choosing epoch numbers, it is hard to predict whether the model will converge or collapse after a pre-chosen number of epochs. The choice of learning rate also depends on both model and dataset. Third, the long latency and energy consumption of training a model obstacle the transfer learning on energy-efficient devices, especially in an environment that class number and distributions keep changing. Our approach, probability layer, can avoid finetuneing at all while adapting to the new dataset, thus all the inconvenience related to finetuneing is avoided naturally.
 
 \paragraph{Model architecture selection.}
 To generate a cascade of models with different resource consumption and performance, existing papers utilize hand-selected architectures, which is not a automatical procedure and only a small number of hyperparameters can be tested. Specifically, NoScope \cite{kang2017noscope} only performs model search by varying the number of convolutional layers (2 or 4), number of convolution units in the base layer (32 or 64), and number of neurons in the fully connected layer (32, 64, 128, or 256). MCDNN \cite{han2016mcdnn} chooses between reduce number of nodes in fully connected layers, decrease number of kernels, and eliminate convolutional layers entirely. FastVideo \cite{shen2016fast} also manually removes layers, decreases kernel sizes, increases kernel strides, and reduces the size of fully-connected layers, to generate a cascade of models with the tradeoff between accuracy and resource consumption. All these manually selected architectures requires human interfere. We observe that the difficulty comes from getting the exact accuracy of each architecture and loose the target to be collecting the relative performance of a sequence of architectures. Further, we bring up perforation to automatically se-lect hyper-parameters according to the targetting classeswithout any finetuning during the selection process.
@@ -631,8 +693,8 @@ Early stop \cite{teerapittayanon2016branchynet, panda2016conditional} is an arch
 We have presented SECS, a real-time deep stream processing system. We identified an environment class skew, that is easily available and can both increase accuracy and decrease resource consumption. Probability layer is brought up to efficiently utilize the class skew. We further identified the class skew dichotomy. To conduct class-specific pruning for hot class skews, we propose perforation, which can bring extra benefit based on whether not a group of classes is easy to classify.
 
 
-\newpage
-\clearpage
+%\newpage
+%\clearpage
 
 
 
@@ -641,5 +703,4 @@ We have presented SECS, a real-time deep stream processing system. We identified
 
 
 \end{document}
-
 
